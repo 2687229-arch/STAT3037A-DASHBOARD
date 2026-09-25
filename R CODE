@@ -1,1 +1,101 @@
 #Cleaning and pre-processing
+#Input of Glacier Datasets (25/09)
+
+#Working Directory
+setwd("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats")
+
+#Load Libraries
+install.packages("sf")
+install.packages("mapview")
+library(sf)
+library(mapview)
+
+#Load the Data
+#1 Glacier Data
+#Read the file
+glacierview <- st_read("glims_download_61374/glims_download_61374/glims_points.shp", quiet = TRUE)
+
+#View the columns
+names(glacierview)
+
+#Make the shapefile 2D
+#Remove the third dimension
+glacierview_2d <- st_zm(glacierview)
+
+#Create the 2d version map
+mapview(glacierview_2d, zcol = "glacier_id")
+
+#2 India Shapefile
+#Read the file
+Indiaview <- st_read("geoBoundaries-IND-ADM1-all/geoBoundaries-IND-ADM1_simplified.shp", quiet = TRUE)
+
+#View the columns
+names(Indiaview)
+
+#Map the shapefile
+mapview(Indiaview, zcol = "shapeID")
+
+#3
+#Combine the views
+mapview(Indiaview, zcol = "shapeID") + mapview(glacierview_2d, zcol = "glacier_id") #CONCATENATION
+
+#4 Clean the Data 
+#Remove NULL values
+datasets1 <- list(glacierview_2d, Indiaview)
+
+datasets1_clean <- lapply(datasets1, function(r) {
+  #Get just the attribute data frame
+  df <- sf::st_drop_geometry(r)
+  
+  #Replace -9999 with NA across all regular columns
+  df[df == -9999] <- NA
+  
+  #Put the clean attributes back into the spatial object
+  sf::st_geometry(df) <- sf::st_geometry(r)
+  return(df)
+})
+
+#Extract your cleaned datasets back out of the list
+glacierview_clean <- datasets1_clean[[1]]
+Indiaview_clean   <- datasets1_clean[[2]]
+
+#Reproject the datasets
+
+#Reproject  UTM 43 (EPSG: 32643)
+india_utm_43<- st_transform(Indiaview_clean, 32643)
+glacier_utm_43 <- st_transform(glacierview_clean, 32643)
+
+# Save the unified UTM datasets
+st_write(india_utm_43, "india_utm_43.shp", delete_dsn = TRUE)
+st_write(glacier_utm_43, "glacier_utm_43.shp", delete_dsn = TRUE)
+
+#Clip the datasets
+#1 Isolate the four main regions in India exposed to the glaciers
+#Load the relavant libraries
+library(tidyverse)
+library(dplyr)
+#Identify and confirm the names
+head(india_utm_43)
+sort(unique(india_utm_43$shapeName))
+
+#Isolate the regions
+India_isolated <- india_utm_43 %>%
+  filter(shapeName %in% c("Jammu and Kashmīr", "Ladākh", "Himāchal Pradesh", "Uttarākhand"))
+
+#Save a shapefile of  the output
+st_write(India_isolated, "India_isolated.shp", delete_dsn = TRUE) 
+
+#View the output
+mapview(India_isolated, zcol="shapeName")
+
+#2 Clip the Glaciers
+glaciers_clip <- st_intersection(glacier_utm_43, India_isolated)
+
+#Write a shapefile of the new clipped output
+st_write(glaciers_clip, "glaciers_clip.shp", delete_dsn= TRUE)
+
+#View the output
+CLIPPED_GLACIERS <-mapview(India_isolated, zcol="shapeName") + mapview(glaciers_clip, zcol="shapeID") 
+
+
+
