@@ -8,5 +8,7 @@ National Water Data Portal. 2025. Accessed 23 September 2026 via: https://nwdp.n
 National Water Data Portal- Village Boundary Dataset. Accessed 22 September 2026 via: https://nwdp.nwic.gov.in/dataset/village-boundary.
 #DEM
 Copernicus DEM (30m): Earth Engine Data Catalog: Copernicus DEM GLO-30
+https://browser.dataspace.copernicus.eu/?zoom=7&lat=33.06853&lng=77.7832&themeId=DEFAULT-THEME&visualizationUrl=U2FsdGVkX1%2FSvdRpSLOxRLlxQzp%2FrVgR4DrP6McYXbwn94RwK6%2B64vbsTh7UcfBC2U4CD9D8uVmStvzEmYh3MJPK57bpIIIuysM7mtX2X4WYm0q9mBPxiNL9%2FAmiklTC&datasetId=DEM_COPERNICUS_90_CDAS&fromTime=2011-06-12T00%3A00%3A00.000Z&toTime=2011-06-12T23%3A59%3A59.999Z&layerId=1_TOPOGRAPHIC
 #LULC
 ESA WorldCover (10m): Earth Engine Data Catalog: ESA WorldCover 10m v200
+https://developers.google.com/earth-engine/datasets/catalog/ESA_WorldCover_v200
