@@ -99,6 +99,86 @@ CLIPPED_GLACIERS <-mapview(India_isolated, zcol="shapeName") + mapview(glaciers_
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+#Cleaning LULC Data
+#Remove NULL values 
+datasets2 <- list(LULC_dataset, Indiaview)
+
+datasets2_clean <- lapply(datasets2, function(r) {
+  #Get just the attribute data frame
+  df_2 <- sf::st_drop_geometry(r)
+  
+  #Replace -9999 with NA across all regular columns
+  df_2[df_2 == -9999] <- NA
+  
+  #Put the clean attributes back into the spatial object
+  sf::st_geometry(df_2) <- sf::st_geometry(r)
+  return(df_2)
+})
+
+#Extract your cleaned datasets back out of the list
+LULC_dataset <- datasets2_clean[[1]]
+
+#Reproject the datasets
+
+#Reproject  UTM 43 (EPSG: 32643)
+LULC_utm_43 <- st_transform(LULC_dataset, 32643)
+
+# Save the unified UTM datasets
+st_write(LULC_utm_43, "LULC_utm_43.shp", delete_dsn = TRUE)
+
+
+#2 Clip the LULC dataset
+LULC_clip <- st_intersection(LULC_utm_43, India_isolated)
+
+#Write a shapefile of the new clipped output
+st_write(LULC_clip, "LULC_clip.shp", delete_dsn= TRUE)
+
+#View the output
+CLIPPED_LULC <-mapview(India_isolated, zcol="shapeName") + mapview(LULC_clip, zcol="shapeID") 
+
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Cleaning settlements Data
+#Remove NULL values 
+datasets3 <- list(settlements, Indiaview)
+
+datasets3_clean <- lapply(datasets3, function(r) {
+  #Get just the attribute data frame
+  df_3 <- sf::st_drop_geometry(r)
+  
+  #Replace -9999 with NA across all regular columns
+  df_3[df_3 == -9999] <- NA
+  
+  #Put the clean attributes back into the spatial object
+  sf::st_geometry(df_3) <- sf::st_geometry(r)
+  return(df_3)
+})
+
+#Extract your cleaned datasets back out of the list
+settlements <- datasets3_clean[[1]]
+
+#Reproject the datasets
+
+#Reproject  UTM 43 (EPSG: 32643)
+settlements_utm_43 <- st_transform(settlements, 32643)
+
+# Save the unified UTM datasets
+st_write(settlements_utm_43, "settlements_utm_43.shp", delete_dsn = TRUE)
+
+
+#2 Clip the LULC dataset
+settlements_clip <- st_intersection(settlements_utm_43, India_isolated)
+
+#Write a shapefile of the new clipped output
+st_write(settlements_clip, "settlements_clip.shp", delete_dsn= TRUE)
+
+#View the output
+CLIPPED_SETTLEMENTS <-mapview(India_isolated, zcol="shapeName") + mapview(settlements_clip, zcol="shapeID") 
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
 #SHINY CODE (DRAFT)
 #
 # This is a Shiny web application. You can run the application by clicking
