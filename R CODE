@@ -97,5 +97,66 @@ st_write(glaciers_clip, "glaciers_clip.shp", delete_dsn= TRUE)
 #View the output
 CLIPPED_GLACIERS <-mapview(India_isolated, zcol="shapeName") + mapview(glaciers_clip, zcol="shapeID") 
 
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#SHINY CODE (DRAFT)
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    https://shiny.posit.co/
+#
+
+library(shiny)
+
+
+
+library(leaflet)
+library(sf)
+
+
+
+glacierview_clean <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/glaciers_clip.shp", quiet = TRUE)
+Indiaview_clean   <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_isolated.shp", quiet = TRUE)
+Indiaview_reprojected <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/india_utm_43.shp", quiet =TRUE)
+
+#Rewrite the names
+Indiaview_clean$shapeName <- gsub("[^[:alnum:] ]", "", 
+                                    enc2utf8(as.character(Indiaview_clean$shapeName)))
+Indiaview_reprojected$shapeName <-gsub("[^[:alnum:] ]", "", 
+                                       enc2utf8(as.character(Indiaview_reprojected$shapeName)))
+glacierview_clean$shapeName <-gsub("[^[:alnum:] ]", "", 
+                                  enc2utf8(as.character(glacierview_clean$shapeName)))
+
+
+library(shiny)
+library(mapview)
+
+ui <- fluidPage(
+  titlePanel("An App indicating the Disaster Risk associated with Glaciers in India"),
+  # mapviewOutput is not needed; we use renderUI
+  uiOutput("map")
+)
+
+server <- function(input, output) {
+  output$map <- renderUI({
+    mapviewOptions(basemaps = c("Esri.WorldImagery"))
+    
+Clipped<- mapview(Indiaview_clean, zcol="shapeName", col.regions=c("lightblue","lightgreen","magenta","lightyellow"), alpha.regions=0.6)  # @map extracts the leaflet widget inside mapview
+
+Full<-    mapview(Indiaview_reprojected, zcol="shapeName", col.regions=NA, alpha.regions=0, color="black", lwd=2)
+Glaciers <- mapview(glacierview_clean, col.regions="gray", alpha.regions=0.6)    
+  (Glaciers+Clipped+Full)@map
+  })
+}
+
+shinyApp(ui = ui, server = server)
+
+
+
+
+
 
 
