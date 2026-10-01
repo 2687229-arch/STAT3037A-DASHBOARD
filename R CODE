@@ -233,8 +233,46 @@ Glaciers <- mapview(glacierview_clean, col.regions="gray", alpha.regions=0.6)
 }
 
 shinyApp(ui = ui, server = server)
+#OLD MAPVIEW CODE (BACKUP)
+library(mapview)
+library(leaflet)
+library(leafem)
+
+ui <- fluidPage(
+  titlePanel("An App indicating the Disaster Risk associated with Glaciers in India"),
+  # mapviewOutput is not needed; we use renderUI
+  uiOutput("map")
+)
+
+server <- function(input, output) {
+  output$map <- renderUI({
+    mapviewOptions(basemaps = c("Esri.WorldImagery"), legend.pos="bottomright", legend.opacity=0.5)
+    
+    Clipped<- mapview(Indiaview_clean, zcol="shapeName", col.regions=c("lightblue","lightgreen","magenta","lightyellow"), alpha.regions=0.6)  # @map extracts the leaflet widget inside mapview
+    
+    Full<-    mapview(Indiaview_reprojected, col.regions=NA, alpha.regions=0, color="black", lwd=2, legend=FALSE)
+    Glaciers <- mapview(glacierview_clean, col.regions="white", alpha.regions=0.6, cex=0.5, legend=FALSE)
+    Roads <- mapview(Roads_clean, zcol= "rdtype", col.regions="gray", alpha.regions=0.6, legend=TRUE)
+    Rivers <-mapview(Rivers_clean, col.regions="darkblue", alpha.regions=0.6, legend=TRUE)
+    HPview1 <-mapview(HPview_clean1, col.regions="lightblue", alpha.regions=0.6, legend=FALSE)
+    JKview1 <-mapview(JKview_clean1, col.regions="lightgreen", alpha.regions=0.6, legend=FALSE)
+    Lview1 <-mapview(Lview_clean1, col.regions="magenta", alpha.regions=0.6, legend=FALSE)
+    Uview1 <-mapview(Uview_clean1, col.regions="lightyellow", alpha.regions=0.6, legend=FALSE)
+Vectorlayers <-(Glaciers+Roads+Rivers+HPview1+JKview1+Lview1+Uview1+Clipped+Full)@map
+Rasters <- leaflet() %>%
+  addProviderTiles("Esri.WorldImagery") %>%
+  leaflet::addRasterImage(India_slope_50, colors = terrain.colors(100), group = "Slope") %>%
+  leaflet::addRasterImage(India_aspect_50, colors = topo.colors(100), group = "Aspect") %>%
+  addLayersControl(overlayGroups = c("Slope","Aspect","Regions","Outline",
+                                     "Roads","Rivers","HP","JK","L","U","Glaciers"),
+                   options = layersControlOptions(collapsed = FALSE)) 
+Rasters %>% leaflet::addMapPane("Vectorlayers") %>% Vectorlayers
+   
+  })
+}
 
 
+shinyApp(ui = ui, server = server)
 
 
 
