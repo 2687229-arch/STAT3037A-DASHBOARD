@@ -1,3 +1,263 @@
+FINAL CODE (01/10)
+#CLEANING
+#Input of Datasets (25/09)-(01/10)
+
+#Working Directory
+setwd("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats")
+
+#Load Libraries
+install.packages("sf")
+install.packages("mapview")
+library(sf)
+library(mapview)
+library(terra)
+library(raster)
+#Load the Data
+#1 Glacier Data
+#Read the file
+glacierview <- st_read("glims_download_61374/glims_download_61374/glims_points.shp", quiet = TRUE)
+
+#View the columns
+names(glacierview)
+
+#Make the shapefile 2D
+#Remove the third dimension
+glacierview_2d <- st_zm(glacierview)
+
+#Create the 2d version map
+mapview(glacierview_2d, zcol = "glacier_id")
+
+#2 India Shapefile
+#Read the file
+Indiaview <- st_read("geoBoundaries-IND-ADM1-all/geoBoundaries-IND-ADM1_simplified.shp", quiet = TRUE)
+
+#View the columns
+names(Indiaview)
+
+#Map the shapefile
+mapview(Indiaview, zcol = "shapeID")
+
+#3 India Roads Shapefile
+Roadsview <- st_read("Roads_India_Glacier_Dashboard/Roads_India_Glacier_Dashboard/Roads_India_Glacier_Dashboard.shp", quiet=TRUE)
+
+#4 India Rivers Shapefile
+Riverview <- st_read("Rivers_India_Glacier_Dashboard/Rivers_India_Glacier_Dashboard.shp", quiet = TRUE)
+
+#5 India Village Boundaries
+HPview <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/HimachelPradesh_Polygon.shp", quiet=TRUE)
+JKview <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/JammuandKashmir_Polygon.shp", quiet=TRUE)
+Lview <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/Ladakh_Polygon.shp", quiet=TRUE)
+Uview <-  st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/Uttarakhand_Polygon.shp", quiet=TRUE)
+Uview_2d <-st_zm(Uview)
+
+#6 DEM of India
+DEMview <- terra::rast("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_DEM.tif")
+
+
+#7 Clean the Data 
+#Vector Data
+#Remove NULL values
+datasets1 <- list(glacierview_2d, Indiaview, Roadsview, Riverview, HPview, JKview, Lview, Uview_2d)
+
+datasets1_clean <- lapply(datasets1, function(r) {
+  #Get just the attribute data frame
+  df <- sf::st_drop_geometry(r)
+  
+  #Replace -9999 with NA across all regular columns
+  df[df == -9999] <- NA
+  
+  #Put the clean attributes back into the spatial object
+  sf::st_geometry(df) <- sf::st_geometry(r)
+  return(df)
+})
+
+#Extract your cleaned datasets back out of the list
+glacierview_clean <- datasets1_clean[[1]]
+Indiaview_clean   <- datasets1_clean[[2]]
+Roadsview_clean <- datasets1_clean[[3]]
+Riverview_clean <- datasets1_clean[[4]]
+HPview_clean <-datasets1_clean[[5]]
+JKview_clean <-datasets1_clean[[6]]
+Lview_clean <-datasets1_clean[[7]]
+Uview_clean <-datasets1_clean[[8]]
+
+#Raster Data
+
+DEMview_clean  <- terra::NAflag(DEMview) <- -9999
+
+#Reproject the datasets
+
+#Reproject  UTM 43 (EPSG: 32643)
+india_utm_43<- st_transform(Indiaview_clean, 32643)
+glacier_utm_43 <- st_transform(glacierview_clean, 32643)
+roads_utm_43 <- st_transform(Roadsview_clean, 32643)
+river_utm_43 <- st_transform(Riverview_clean, 32643)
+HPview_utm_43 <-st_transform(HPview_clean, 32643)
+JKview_utm_43 <-st_transform(JKview_clean, 32643)
+Lview_utm_43 <-st_transform(Lview_clean, 32643)
+Uview_utm_43 <-st_transform(Uview_clean, 32643)
+DEMview_utm_43 <- terra::project(DEMview, "EPSG:32643")
+
+
+# Save the unified UTM datasets
+st_write(india_utm_43, "india_utm_43.shp", delete_dsn = TRUE)
+st_write(glacier_utm_43, "glacier_utm_43.shp", delete_dsn = TRUE)
+st_write(roads_utm_43, "roads_utm_43.shp", delete_dsn=TRUE)
+st_write(river_utm_43, "river_utm_43.shp", delete_dsn=TRUE)
+st_write(HPview_utm_43, "HPview_utm_43.shp", delete_dsn=TRUE)
+st_write(JKview_utm_43, "JKview_utm_43.shp", delete_dsn=TRUE)
+st_write(Lview_utm_43, "Lview_utm_43.shp", delete_dsn=TRUE)
+st_write(Uview_utm_43, "Uview_utm_43.shp", delete_dsn=TRUE)
+
+
+# Save your projected raster to a new GeoTIFF file
+terra::writeRaster(DEMview_utm_43, filename = "DEMview_utm_43.tif", overwrite = TRUE)
+
+
+#Clip the datasets
+#1 Isolate the four main regions in India exposed to the glaciers
+#Load the relavant libraries
+library(tidyverse)
+library(dplyr)
+#Identify and confirm the names
+head(india_utm_43)
+sort(unique(india_utm_43$shapeName))
+
+#Isolate the regions
+India_isolated <- india_utm_43 %>%
+  filter(shapeName %in% c("Jammu and Kashmīr", "Ladākh", "Himāchal Pradesh", "Uttarākhand"))
+
+#Save a shapefile of  the output
+st_write(India_isolated, "India_isolated.shp", delete_dsn = TRUE) 
+
+#View the output
+mapview(India_isolated, zcol="shapeName")
+
+#2 Clip the Glaciers
+glaciers_clip <- st_intersection(glacier_utm_43, India_isolated)
+
+#Write a shapefile of the new clipped output
+st_write(glaciers_clip, "glaciers_clip.shp", delete_dsn= TRUE)
+
+#3 Isolate the roads 
+head(roads_utm_43)
+sort(unique(roads_utm_43$rdtype))
+India_isolated_roads <- roads_utm_43 %>%
+  dplyr::filter(roads_utm_43$rdtype %in% c("National Highway", "State Highway"))
+#Write a shapefile to the output
+st_write(India_isolated_roads, "India_isolated_roads.shp", delete_dsn= TRUE)
+
+#4 Derive aspect and slope data
+India_slope <- terrain(DEMview_utm_43, v = 'slope', unit = 'degrees')  
+India_aspect <- terrain(DEMview_utm_43, v = 'aspect', unit = 'degrees') 
+
+terra::writeRaster(India_slope, filename = "India_slope.tif", overwrite = TRUE)
+terra::writeRaster(India_aspect, filename = "India_aspect.tif", overwrite = TRUE)
+
+#BASE CODE FOR APP
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    https://shiny.posit.co/
+#
+
+library(shiny)
+library(sf)
+library(stars)
+library(leaflet)
+
+glacierview_clean <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/glaciers_clip.shp", quiet = TRUE)
+Indiaview_clean   <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_isolated.shp", quiet = TRUE)
+Indiaview_reprojected <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/india_utm_43.shp", quiet =TRUE)
+Roads_clean <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_isolated_roads.shp", quiet=TRUE)
+Rivers_clean <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/river_utm_43.shp", quiet=TRUE)
+HPview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/HPview_utm_43.shp", quiet=TRUE)
+JKview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/JKview_utm_43.shp", quiet=TRUE)
+Lview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/Lview_utm_43.shp", quiet=TRUE)
+Uview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/Uview_utm_43.shp", quiet=TRUE)
+India_slope1 <- terra::rast("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_aspect.tif")
+India_aspect1 <- terra::rast("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_slope.tif")
+
+
+#Rewrite the names
+Indiaview_clean$shapeName <- gsub("[^[:alnum:] ]", "", 
+                                    enc2utf8(as.character(Indiaview_clean$shapeName)))
+Indiaview_reprojected$shapeName <-gsub("[^[:alnum:] ]", "", 
+                                       enc2utf8(as.character(Indiaview_reprojected$shapeName)))
+glacierview_clean$shapeName <-gsub("[^[:alnum:] ]", "", 
+                                  enc2utf8(as.character(glacierview_clean$shapeName)))
+#Reduce the resolution
+India_slope_50 <- terra::aggregate(India_slope1, fact = 50)
+India_aspect_50 <- terra::aggregate(India_aspect1, fact = 50)
+
+#This displays the resolution
+India_slope_res <- st_as_stars(India_slope_50)
+India_aspect_res <- st_as_stars(India_aspect_50)
+
+#Reproject to WGS 1984 4326 (as Leaflet only operates using this)
+Indiaview_1984<- st_transform(Indiaview_clean, 4326)
+Indiaview_full_1984 <- st_transform(Indiaview_reprojected, 4326)
+Glacierview_1984 <- st_transform(glacierview_clean, 4326)
+Roadsview_1984 <- st_transform(Roads_clean, 4326)
+Riverview_1984 <- st_transform(Rivers_clean, 4326)
+HPview_1984 <-st_transform(HPview_clean1, 4326)
+JKview_1984 <-st_transform(JKview_clean1, 4326)
+Lview_1984 <-st_transform(Lview_clean1, 4326)
+Uview_1984 <-st_transform(Uview_clean1, 4326)
+
+ui <- fluidPage(
+  titlePanel("An App of the Northern Himalayan Regions of India indicating the Glacier Risk"),
+  fluidRow(
+    column(width = 2),  #Leaves space on the LHS
+    column(width = 8,
+           leafletOutput("map", width = "100%", height = "600px")
+    ),
+    column(width = 2) #Leaves space open on the RHS
+  )
+)
+ 
+
+server <- function(input, output) {
+  output$map <- renderLeaflet({
+    leaflet() %>%
+      addProviderTiles("Esri.WorldImagery") %>%
+      addRasterImage(India_slope_50, colors = terrain.colors(100), group = "Slope") %>%
+      addRasterImage(India_aspect_50, colors = topo.colors(100), group = "Aspect") %>%
+      addPolygons(data = Indiaview_1984, fillColor="gray",color="black",
+                  weight=1, group="Regions of India Near the Himalayas") %>%
+      addPolylines(data = Indiaview_full_1984, color="black", weight=2, group="Map of India") %>%
+      addCircleMarkers(data = Glacierview_1984, radius=0.5, fillColor="white",color="black", weight=1, fillOpacity=1, 
+                       opacity=1, group="Glaciers of the Himalayas") %>%
+      addPolylines(data = Roadsview_1984 %>% dplyr::filter(rdtype == "National Highway"),
+                   color = "yellow", weight = 1.5, group = "National Highways") %>%
+      addPolylines(data=Roadsview_1984 %>% dplyr::filter(rdtype == "State Highway"),
+                   color = "white", weight = 1, group = "State Highways" ) %>%
+      addPolylines(data = Riverview_1984, color="darkblue", weight=1, group="Rivers") %>%
+      addPolygons(data = HPview_1984, fillColor="#7A4988",color="black", weight=1, group="Himachal Pradesh") %>%
+      addPolygons(data = JKview_1984, fillColor="purple", color="black",weight=1, group="Jammu and Kashmir") %>%
+      addPolygons(data = Lview_1984, fillColor="magenta",color="black",weight=1, group="Ladakh") %>%
+      addPolygons(data = Uview_1984, fillColor="pink",color="black",weight=1, group="Uttarakhand") %>%
+      addLegend(position = "bottomleft",
+                colors = c("gray", "#7A4988","purple","magenta","pink","yellow",
+                           "white","darkblue","aliceblue"), 
+                labels = c("Regions", "Himachel Pradesh","Jammu and Kashmir","Ladakh","Uttarakhand",
+                           "National Highway","State Highway","Rivers", "Glaciers"),
+                title = "Map Layers") %>%
+      addLayersControl(overlayGroups = c("Outline of India","Regions of India Near the Himalayas",
+                                         "Himachal Pradesh","Jammu and Kashmir",
+                                         "Ladakh","Uttarakhand","National Highways", "State Highways","Slope", "Aspect",
+                                         "Rivers","Glaciers of the Himalayas"),
+                       options = layersControlOptions(collapsed = FALSE))
+  })
+}
+
+shinyApp(ui = ui, server = server)
+
+#------------------------------IGNORE THE CODE FROM BELOW------------------------------------------------------------------------------------------------------
+
 #Cleaning and pre-processing
 #Input of Glacier Datasets (25/09)
 
@@ -273,6 +533,7 @@ Rasters %>% leaflet::addMapPane("Vectorlayers") %>% Vectorlayers
 
 
 shinyApp(ui = ui, server = server)
+
 
 
 
