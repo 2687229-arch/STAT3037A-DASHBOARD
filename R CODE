@@ -535,6 +535,685 @@ Rasters %>% leaflet::addMapPane("Vectorlayers") %>% Vectorlayers
 shinyApp(ui = ui, server = server)
 
 
+#=====================================================================
+# ADDING DISASTER RISK AND EVACUATION CONTROLS TO SHINY APP
+#=====================================================================
+
+
+#=====================================================================
+# USER INTERFACE
+#=====================================================================
+
+ui <- fluidPage(
+  
+  titlePanel("An App of the Northern Himalayan Regions of India indicating the Glacier Risk"),
+  
+  fluidRow(
+    
+    
+    #=================================================================
+    # LEFT HAND SIDE OF DASHBOARD
+    #=================================================================
+    
+    column(
+      width = 3,
+      
+      
+      #=================================================================
+      # SECTION 1: DISASTER RISK
+      #=================================================================
+      
+      wellPanel(
+        
+        h3("Disaster Risk"),
+        
+        
+        #-----------------------------------------------------------------
+        # DISTANCE TO RIVERS
+        #-----------------------------------------------------------------
+        
+        selectInput(
+          "river_distance",
+          "Distance to Rivers:",
+          
+          choices = c(
+            "500 m" = 500,
+            "1000 m" = 1000,
+            "2000 m" = 2000,
+            "5000 m" = 5000,
+            "10000 m" = 10000
+          ),
+          
+          selected = 1000
+        ),
+        
+        
+        #-----------------------------------------------------------------
+        # SEARCH RADIUS FROM GLACIERS
+        #-----------------------------------------------------------------
+        
+        selectInput(
+          "glacier_radius",
+          "Search Radius from Glaciers:",
+          
+          choices = c(
+            "1000 m" = 1000,
+            "2000 m" = 2000,
+            "5000 m" = 5000,
+            "10000 m" = 10000,
+            "20000 m" = 20000
+          ),
+          
+          selected = 5000
+        ),
+        
+        
+        #-----------------------------------------------------------------
+        # ASPECT
+        #-----------------------------------------------------------------
+        
+        selectInput(
+          "aspect_direction",
+          "Aspect:",
+          
+          choices = c(
+            "North" = "N",
+            "North-East" = "NE",
+            "East" = "E",
+            "South-East" = "SE",
+            "South" = "S",
+            "South-West" = "SW",
+            "West" = "W",
+            "North-West" = "NW"
+          ),
+          
+          selected = "N"
+        ),
+        
+        
+        #-----------------------------------------------------------------
+        # SLOPE
+        #-----------------------------------------------------------------
+        
+        sliderInput(
+          "slope_range",
+          "Slope (degrees):",
+          
+          min = 0,
+          max = 60,
+          
+          value = c(0, 30),
+          
+          step = 1
+        ),
+        
+        
+        #-----------------------------------------------------------------
+        # RUN DISASTER RISK BUTTON
+        #-----------------------------------------------------------------
+        
+        actionButton(
+          "run_risk",
+          "RUN DISASTER RISK",
+          width = "100%"
+        )
+        
+      ),
+      
+      
+      #=================================================================
+      # SECTION 2: EVACUATION
+      #=================================================================
+      
+      wellPanel(
+        
+        h3("Evacuation"),
+        
+        
+        #-----------------------------------------------------------------
+        # DISTANCE TO ROADS
+        #-----------------------------------------------------------------
+        
+        selectInput(
+          "road_distance",
+          "Distance to Roads:",
+          
+          choices = c(
+            "500 m - Ideal" = 500,
+            "1000 m - Highly Suitable" = 1000,
+            "2000 m - Suitable" = 2000,
+            "5000 m - Less Suitable" = 5000,
+            "10000 m - Not Ideal" = 10000
+          ),
+          
+          selected = 500
+        ),
+        
+        
+        #-----------------------------------------------------------------
+        # RUN EVACUATION BUTTON
+        #-----------------------------------------------------------------
+        
+        actionButton(
+          "run_evacuation",
+          "RUN EVACUATION",
+          width = "100%"
+        )
+        
+      )
+      
+    ),
+    
+    
+    #=================================================================
+    # MAP
+    #=================================================================
+    
+    column(
+      width = 9,
+      
+      leafletOutput(
+        "map",
+        width = "100%",
+        height = "750px"
+      )
+      
+    )
+    
+  )
+  
+)
+
+
+#=====================================================================
+# SERVER
+#=====================================================================
+
+server <- function(input, output) {
+  
+  
+  #===================================================================
+  # ORIGINAL MAP
+  #===================================================================
+  
+  output$map <- renderLeaflet({
+    
+    leaflet() %>%
+      
+      addProviderTiles("Esri.WorldImagery") %>%
+      
+      
+      #Slope
+      
+      addRasterImage(
+        India_slope_50,
+        colors = terrain.colors(100),
+        group = "Slope"
+      ) %>%
+      
+      
+      #Aspect
+      
+      addRasterImage(
+        India_aspect_50,
+        colors = topo.colors(100),
+        group = "Aspect"
+      ) %>%
+      
+      
+      #Regions of India
+      
+      addPolygons(
+        data = Indiaview_1984,
+        fillColor = "gray",
+        color = "black",
+        weight = 1,
+        group = "Regions of India Near the Himalayas"
+      ) %>%
+      
+      
+      #Map of India
+      
+      addPolylines(
+        data = Indiaview_full_1984,
+        color = "black",
+        weight = 2,
+        group = "Map of India"
+      ) %>%
+      
+      
+      #Glaciers
+      
+      addCircleMarkers(
+        data = Glacierview_1984,
+        radius = 0.5,
+        fillColor = "white",
+        color = "black",
+        weight = 1,
+        fillOpacity = 1,
+        opacity = 1,
+        group = "Glaciers of the Himalayas"
+      ) %>%
+      
+      
+      #National Highways
+      
+      addPolylines(
+        data = Roadsview_1984 %>% 
+          dplyr::filter(rdtype == "National Highway"),
+        color = "yellow",
+        weight = 1.5,
+        group = "National Highways"
+      ) %>%
+      
+      
+      #State Highways
+      
+      addPolylines(
+        data = Roadsview_1984 %>% 
+          dplyr::filter(rdtype == "State Highway"),
+        color = "white",
+        weight = 1,
+        group = "State Highways"
+      ) %>%
+      
+      
+      #Rivers
+      
+      addPolylines(
+        data = Riverview_1984,
+        color = "darkblue",
+        weight = 1,
+        group = "Rivers"
+      ) %>%
+      
+      
+      #Himachal Pradesh
+      
+      addPolygons(
+        data = HPview_1984,
+        fillColor = "#7A4988",
+        color = "black",
+        weight = 1,
+        group = "Himachal Pradesh"
+      ) %>%
+      
+      
+      #Jammu and Kashmir
+      
+      addPolygons(
+        data = JKview_1984,
+        fillColor = "purple",
+        color = "black",
+        weight = 1,
+        group = "Jammu and Kashmir"
+      ) %>%
+      
+      
+      #Ladakh
+      
+      addPolygons(
+        data = Lview_1984,
+        fillColor = "magenta",
+        color = "black",
+        weight = 1,
+        group = "Ladakh"
+      ) %>%
+      
+      
+      #Uttarakhand
+      
+      addPolygons(
+        data = Uview_1984,
+        fillColor = "pink",
+        color = "black",
+        weight = 1,
+        group = "Uttarakhand"
+      ) %>%
+      
+      
+      #Legend
+      
+      addLegend(
+        position = "bottomleft",
+        
+        colors = c(
+          "gray",
+          "#7A4988",
+          "purple",
+          "magenta",
+          "pink",
+          "yellow",
+          "white",
+          "darkblue",
+          "aliceblue"
+        ),
+        
+        labels = c(
+          "Regions",
+          "Himachal Pradesh",
+          "Jammu and Kashmir",
+          "Ladakh",
+          "Uttarakhand",
+          "National Highway",
+          "State Highway",
+          "Rivers",
+          "Glaciers"
+        ),
+        
+        title = "Map Layers"
+      ) %>%
+      
+      
+      #Layer Control
+      
+      addLayersControl(
+        
+        overlayGroups = c(
+          "Regions of India Near the Himalayas",
+          "Himachal Pradesh",
+          "Jammu and Kashmir",
+          "Ladakh",
+          "Uttarakhand",
+          "National Highways",
+          "State Highways",
+          "Slope",
+          "Aspect",
+          "Rivers",
+          "Glaciers of the Himalayas",
+          "River Risk Distance",
+          "Glacier Search Radius",
+          "Evacuation Road Distance"
+        ),
+        
+        options = layersControlOptions(
+          collapsed = FALSE
+        )
+      )
+    
+  })
+  
+  
+  #===================================================================
+  # DISASTER RISK RUN BUTTON
+  #===================================================================
+  
+  observeEvent(input$run_risk, {
+    
+    
+    #-----------------------------------------------------------------
+    # GET VALUES SELECTED BY USER
+    #-----------------------------------------------------------------
+    
+    river_distance <- as.numeric(input$river_distance)
+    
+    glacier_radius <- as.numeric(input$glacier_radius)
+    
+    selected_aspect <- input$aspect_direction
+    
+    minimum_slope <- input$slope_range[1]
+    
+    maximum_slope <- input$slope_range[2]
+    
+    
+    #-----------------------------------------------------------------
+    # DISTANCE FROM RIVERS
+    #-----------------------------------------------------------------
+    
+    river_buffer <- st_buffer(
+      Rivers_clean,
+      dist = river_distance
+    )
+    
+    
+    #Merge overlapping river buffers
+    
+    river_buffer <- st_union(
+      river_buffer
+    )
+    
+    
+    #Convert back into an sf object
+    
+    river_buffer <- st_sf(
+      geometry = river_buffer
+    )
+    
+    
+    #Reproject for Leaflet
+    
+    river_buffer_1984 <- st_transform(
+      river_buffer,
+      4326
+    )
+    
+    
+    #-----------------------------------------------------------------
+    # SEARCH RADIUS AROUND GLACIERS
+    #-----------------------------------------------------------------
+    
+    glacier_buffer <- st_buffer(
+      glacierview_clean,
+      dist = glacier_radius
+    )
+    
+    
+    #Merge overlapping glacier buffers
+    
+    glacier_buffer <- st_union(
+      glacier_buffer
+    )
+    
+    
+    #Convert back into an sf object
+    
+    glacier_buffer <- st_sf(
+      geometry = glacier_buffer
+    )
+    
+    
+    #Reproject for Leaflet
+    
+    glacier_buffer_1984 <- st_transform(
+      glacier_buffer,
+      4326
+    )
+    
+    
+    #-----------------------------------------------------------------
+    # ADD DISASTER RISK RESULTS TO MAP
+    #-----------------------------------------------------------------
+    
+    leafletProxy("map") %>%
+      
+      
+      #Remove the previous risk result
+      
+      clearGroup("River Risk Distance") %>%
+      
+      clearGroup("Glacier Search Radius") %>%
+      
+      
+      #Add river distance result
+      
+      addPolygons(
+        data = river_buffer_1984,
+        color = "blue",
+        weight = 2,
+        fillColor = "blue",
+        fillOpacity = 0.20,
+        group = "River Risk Distance"
+      ) %>%
+      
+      
+      #Add glacier search radius
+      
+      addPolygons(
+        data = glacier_buffer_1984,
+        color = "red",
+        weight = 2,
+        fillColor = "red",
+        fillOpacity = 0.20,
+        group = "Glacier Search Radius"
+      )
+    
+    
+    #-----------------------------------------------------------------
+    # SHOW SELECTED DISASTER RISK PARAMETERS
+    #-----------------------------------------------------------------
+    
+    showNotification(
+      
+      paste(
+        "Disaster Risk Analysis:",
+        "River Distance =", river_distance, "m |",
+        "Glacier Radius =", glacier_radius, "m |",
+        "Aspect =", selected_aspect, "|",
+        "Slope =", minimum_slope, "to", maximum_slope, "degrees"
+      ),
+      
+      type = "message",
+      duration = 5
+    )
+    
+  })
+  
+  
+  #===================================================================
+  # EVACUATION RUN BUTTON
+  #===================================================================
+  
+  observeEvent(input$run_evacuation, {
+    
+    
+    #-----------------------------------------------------------------
+    # GET SELECTED ROAD DISTANCE
+    #-----------------------------------------------------------------
+    
+    road_distance <- as.numeric(
+      input$road_distance
+    )
+    
+    
+    #-----------------------------------------------------------------
+    # CREATE DISTANCE FROM ROADS
+    #-----------------------------------------------------------------
+    
+    road_buffer <- st_buffer(
+      Roads_clean,
+      dist = road_distance
+    )
+    
+    
+    #Merge overlapping road buffers
+    
+    road_buffer <- st_union(
+      road_buffer
+    )
+    
+    
+    #Convert to sf object
+    
+    road_buffer <- st_sf(
+      geometry = road_buffer
+    )
+    
+    
+    #Reproject for Leaflet
+    
+    road_buffer_1984 <- st_transform(
+      road_buffer,
+      4326
+    )
+    
+    
+    #-----------------------------------------------------------------
+    # CLASSIFY EVACUATION SUITABILITY
+    #-----------------------------------------------------------------
+    
+    if (road_distance == 500) {
+      
+      evacuation_class <- "Ideal"
+      
+    } else if (road_distance == 1000) {
+      
+      evacuation_class <- "Highly Suitable"
+      
+    } else if (road_distance == 2000) {
+      
+      evacuation_class <- "Suitable"
+      
+    } else if (road_distance == 5000) {
+      
+      evacuation_class <- "Less Suitable"
+      
+    } else {
+      
+      evacuation_class <- "Not Ideal"
+      
+    }
+    
+    
+    #-----------------------------------------------------------------
+    # ADD EVACUATION RESULT TO MAP
+    #-----------------------------------------------------------------
+    
+    leafletProxy("map") %>%
+      
+      
+      #Remove ONLY previous evacuation result
+      
+      clearGroup("Evacuation Road Distance") %>%
+      
+      
+      #Add new evacuation result
+      
+      addPolygons(
+        data = road_buffer_1984,
+        color = "green",
+        weight = 2,
+        fillColor = "green",
+        fillOpacity = 0.20,
+        group = "Evacuation Road Distance",
+        
+        popup = paste(
+          "Distance:", road_distance, "m",
+          "<br>",
+          "Suitability:", evacuation_class
+        )
+      )
+    
+    
+    #-----------------------------------------------------------------
+    # SHOW EVACUATION RESULT
+    #-----------------------------------------------------------------
+    
+    showNotification(
+      
+      paste(
+        "Evacuation Analysis:",
+        road_distance,
+        "m from road -",
+        evacuation_class
+      ),
+      
+      type = "message",
+      duration = 5
+    )
+    
+  })
+  
+}
+
+
+#=====================================================================
+# RUN SHINY APP
+#=====================================================================
+
+shinyApp(
+  ui = ui,
+  server = server
+)
 
 
 
