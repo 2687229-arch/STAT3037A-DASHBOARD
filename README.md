@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Dashboard banner" width="800">
+  <img src="assets/banner.png" alt="Dashboard banner" width="700" height="500">
 </p>
 
 # 📊 GEOG3037A-DASHBOARD
 
-DESCRIPTIONS
+In this repository, you can hold a front row seat to the creation of a dashboard that could save lives. Here, you find resources and information on Ladakh, Himachal Pradesh, Uttarakhand, and Jammu & Kashmir. Regions at threat of landslides and flash floods due to their proximity to glaciers.
 
 [!\[R](https://img.shields.io/badge/R-4.x-276DC3?logo=r&logoColor=white)](https://www.r-project.org/)
 [!\[Shiny](https://img.shields.io/badge/built%20with-Shiny-blue)](https://shiny.posit.co/)
@@ -26,7 +26,7 @@ DESCRIPTION
 
 \---
 
-## 🖼️ Screenshots
+## 🖼️ Dashboard Overview
 
 <p align="center">
   <img src="assets/screenshot-overview.png" alt="Overview page" width="700">
