@@ -77,6 +77,13 @@ description
 
 └── README.md
 
+## 🔍 Group Members
+
+* [Hannah Venter]
+* [Nomzamo Dlomo]
+* [Oratilwe Tau]
+* [Sayeeda Naidoo]
+
 
 
 
