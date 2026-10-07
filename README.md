@@ -89,12 +89,6 @@ description
 
 \---
 
-## 🤝 Contributing
-
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
-
-\---
-
 ## 📜 License
 
 Released under the [MIT License](LICENSE).
