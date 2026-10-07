@@ -17,13 +17,9 @@ In this repository, you can hold a front row seat to the creation of a dashboard
 * [Contributing](#-contributing)
 * [License](#-license)
 
-\
-
 ## 🔍 Overview
 
 DESCRIPTION
-
-\
 
 ## 🖼️ Dashboard Overview
 
@@ -31,7 +27,6 @@ DESCRIPTION
   <img src="assets/screenshot-overview.png" alt="Overview page" width="700">
 </p>
 
-\
 
 ## 🚀 Getting started
 
@@ -51,7 +46,6 @@ renv::restore()
 ```r
 shiny::runApp()
 
-\
 
 ## 🗂️ Data
 
@@ -61,7 +55,6 @@ description
 |-|-|-|
 |description|description|`data/`|
 
-\
 
 ## 📁 Project structure
 
