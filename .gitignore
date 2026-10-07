@@ -1,0 +1,33 @@
+# R / RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.Rapp.history
+*.Rproj.user
+
+# Secrets and local config
+.Renviron
+.env
+config.local.yml
+
+# Shiny / deployment
+rsconnect/
+
+# renv library (keep renv.lock)
+renv/library/
+renv/local/
+renv/staging/
+
+# Knitr / Quarto artifacts
+*_cache/
+*_files/
+/.quarto/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large raw data (keep data-raw scripts, not the files)
+data-raw/*.csv
+data-raw/*.xlsx
