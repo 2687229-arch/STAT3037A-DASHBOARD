@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Dashboard banner" width="700" height="500">
+  <img src="assets/banner.png" alt="Dashboard banner" width="500" height="200">
 </p>
 
 # 📊 GEOG3037A-DASHBOARD
