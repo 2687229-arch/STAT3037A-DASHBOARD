@@ -21,6 +21,14 @@ Resources:
 ## 🔍 Overview
 
 DESCRIPTION
+## Group Members
+
+* Hannah Venter
+* Nomzamo Dlomo
+* Oratilwe Tau
+* Sayeeda Naidoo
+
+
 
 ## 🖼️ Dashboard Overview
 
@@ -76,13 +84,6 @@ description
 ├── R/            # R / Shiny code
 
 └── README.md
-
-## 🔍 Group Members
-
-* [Hannah Venter](#-Hannah Venter)
-* [Nomzamo Dlomo](#-Nomzamo Dlomo)
-* [Oratilwe Tau](#-Oratilwe Tau)
-* [Sayeeda Naidoo](#-Sayeeda Naidoo)
 
 
 
