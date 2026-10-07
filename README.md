@@ -46,13 +46,11 @@ DESCRIPTION
 ```r
 # Clone the repo, open the project, then restore packages
 renv::restore()
-```
 
 ### Run the app
 
 ```r
 shiny::runApp()
-```
 
 \---
 
@@ -68,7 +66,6 @@ description
 
 ## 📁 Project structure
 
-```
 .
 
 ├── assets/       # Images and screenshots
@@ -87,11 +84,9 @@ description
 
 └── README.md
 
-\---
 
-## 📜 License
 
-Released under the [MIT License](LICENSE).
+
 
 
 
