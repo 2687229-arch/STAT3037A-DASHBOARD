@@ -79,10 +79,10 @@ description
 
 ## 🔍 Group Members
 
-* [Hannah Venter]
-* [Nomzamo Dlomo]
-* [Oratilwe Tau]
-* [Sayeeda Naidoo]
+* [Hannah Venter](#-Hannah Venter)
+* [Nomzamo Dlomo](#-Nomzamo Dlomo)
+* [Oratilwe Tau](#-Oratilwe Tau)
+* [Sayeeda Naidoo](#-Sayeeda Naidoo)
 
 
 
