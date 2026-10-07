@@ -6,7 +6,7 @@
 
 In this repository, you can hold a front row seat to the creation of a dashboard that could save lives. Here, you find resources and information on Ladakh, Himachal Pradesh, Uttarakhand, and Jammu & Kashmir. Regions at threat of landslides and flash floods due to their proximity to glaciers.
 
-[Resources:]
+Resources:
 [!\[R](https://img.shields.io/badge/R-4.x-276DC3?logo=r&logoColor=white)](https://www.r-project.org/)
 [!\[Shiny](https://img.shields.io/badge/built%20with-Shiny-blue)](https://shiny.posit.co/)
 
