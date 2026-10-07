@@ -8,7 +8,6 @@ In this repository, you can hold a front row seat to the creation of a dashboard
 
 [!\[R](https://img.shields.io/badge/R-4.x-276DC3?logo=r&logoColor=white)](https://www.r-project.org/)
 [!\[Shiny](https://img.shields.io/badge/built%20with-Shiny-blue)](https://shiny.posit.co/)
-[!\[License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 * [Overview](#-overview)
 * [Screenshots](#-screenshots)
