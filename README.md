@@ -142,7 +142,7 @@ This is an academic project and **not an official early-warning system**. Do not
 
 ## 👥 Team
 
-STAT3037A project team: Hannah Venter, Oratilwe Tau, Sayeeda Naidoo, Nomzamo Dlomo
+STAT3037A project team: Hannah Venter, Oratilwe Tau, Sayeeda Naidoo, Nomzamo Dlomo.
 
 \---
 
