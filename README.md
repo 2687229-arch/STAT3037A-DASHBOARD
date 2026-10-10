@@ -11,7 +11,7 @@ An interactive R Shiny dashboard that helps anticipate **landslide** and **flash
 [!\[Course](https://img.shields.io/badge/course-STAT3037A-orange)](#)
 !\[Status](https://img.shields.io/badge/status-in%20development-orange)
 
-\---
+
 
 ## 📑 Contents
 
@@ -24,7 +24,7 @@ An interactive R Shiny dashboard that helps anticipate **landslide** and **flash
 * [Limitations](#-limitations)
 * [Team](#-team)
 
-\---
+
 
 ## 🔍 Overview
 
@@ -47,7 +47,7 @@ flowchart LR
     D --> E\[Explore hazard areas]
 ```
 
-\---
+
 
 ## 🗺️ Study regions
 
@@ -58,7 +58,7 @@ flowchart LR
 |3|**Uttarakhand**|Glacier-fed rivers and steep slopes, with a history of major flash floods|
 |4|**Jammu \& Kashmir**|Himalayan and Pir Panjal terrain, with river basins and road links vulnerable to slope failure and flooding|
 
-\---
+
 
 ## 🛠️ Project status
 
@@ -73,7 +73,7 @@ This dashboard is **under active development**.
 * \[ ] Deploy the app online
 * \[ ] Add screenshots and a demo GIF
 
-\---
+
 
 ## 🚀 Getting started
 
@@ -85,7 +85,7 @@ This dashboard is **under active development**.
 shiny::runApp()
 ```
 
-\---
+
 
 ## 🗂️ Data
 
@@ -97,7 +97,7 @@ Full source details are in the [`docs/`](docs/) folder.
 |Rivers and streams|River network from India-WRIS|`data/rivers/`|
 |Boundaries and glaciers|India shapefile and glacier data|`data/boundaries/`|
 
-\---
+
 
 ## 📁 Project structure
 
@@ -113,13 +113,13 @@ Full source details are in the [`docs/`](docs/) folder.
 └── README.md
 ```
 
-\---
+
 
 ## ⚠️ Limitations
 
 This is an academic project and **not an official early-warning system**. Do not use it to make safety or evacuation decisions. Always follow guidance from national and local disaster management authorities.
 
-\---
+
 
 ## 👥 Team
 
