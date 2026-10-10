@@ -4,7 +4,7 @@
 
 # 🏔️ Landslide & Flash Flood Early-Insight Dashboard
 
-An interactive R Shiny dashboard that helps anticipate **landslide** and **flash flood** activity across four regions of India, using spatial data on rivers, roads, glaciers and terrain.
+An interactive R Shiny dashboard that helps anticipate **landslide** and **flash flood** activity across four Himalayan regions of India (Ladakh, Himachal Pradesh, Uttarakhand and Jammu & Kashmir), using spatial data on rivers, roads, glaciers and terrain.
 
 [![R](https://img.shields.io/badge/R-4.x-276DC3?logo=r&logoColor=white)](https://www.r-project.org/)
 [![Shiny](https://img.shields.io/badge/built%20with-Shiny-blue)](https://shiny.posit.co/)
@@ -12,25 +12,16 @@ An interactive R Shiny dashboard that helps anticipate **landslide** and **flash
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 <p align="center">
-  <a href="https://YOUR-APP-LINK.shinyapps.io/dashboard/">
-    <img src="https://img.shields.io/badge/%F0%9F%9A%80%20Launch%20the%20live%20dashboard-2ea44f?style=for-the-badge" alt="Launch dashboard">
-  </a>
+  <img src="https://img.shields.io/badge/status-in%20development-orange?style=for-the-badge" alt="Status: in development">
 </p>
 
-<p align="center">
-  <img src="assets/demo.gif" alt="Dashboard demo" width="800">
-</p>
-
-- [Overview](#-overview)
-- [Study regions](#-study-regions)
-- [Screenshots](#-screenshots)
-- [Getting started](#-getting-started)
-- [Data](#-data)
-- [Project structure](#-project-structure)
-- [Limitations](#-limitations)
-- [Team](#-team)
-- [Contributing](#-contributing)
-- [License](#-license)
+<!-- When the app is deployed, replace the badge above with:
+<a href="https://YOUR-APP-LINK.shinyapps.io/dashboard/">
+  <img src="https://img.shields.io/badge/%F0%9F%9A%80%20Launch%20the%20live%20dashboard-2ea44f?style=for-the-badge" alt="Launch dashboard">
+</a>
+And add a demo GIF:
+<img src="assets/demo.gif" alt="Dashboard demo" width="800">
+-->
 
 ---
 
@@ -64,20 +55,27 @@ flowchart LR
 
 ## 🗺️ Study regions
 
-| # | Region | Notes |
-| - | ------ | ----- |
-| 1 | description | description |
-| 2 | description | description |
-| 3 | description | description |
-| 4 | description | description |
+| # | Region | Why it matters |
+| - | ------ | -------------- |
+| 1 | **Ladakh** | High-altitude, glacier-rich Union Territory with steep river valleys and exposure to flash floods |
+| 2 | **Himachal Pradesh** | Mountainous state with frequent monsoon landslides along road corridors |
+| 3 | **Uttarakhand** | Glacier-fed rivers and steep slopes, with a history of major flash floods (e.g. Kedarnath 2013, Chamoli 2021) |
+| 4 | **Jammu & Kashmir** | Himalayan and Pir Panjal terrain, with river basins and road links vulnerable to slope failure and flooding |
 
 ---
 
-## 🖼️ Screenshots
+## 🛠️ Project status
 
-<p align="center">
-  <img src="assets/screenshot-map.png" alt="Map view" width="700">
-</p>
+This dashboard is **under active development**.
+
+- [x] Collect road, river and glacier datasets
+- [x] Organise repository and documentation
+- [ ] Clean and combine spatial layers for the four regions
+- [ ] Build the interactive map
+- [ ] Add region comparison views
+- [ ] Add hazard indicators
+- [ ] Deploy the app online
+- [ ] Add screenshots and a demo GIF
 
 ---
 
