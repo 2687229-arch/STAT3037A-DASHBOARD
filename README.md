@@ -6,10 +6,6 @@
 
 An interactive R Shiny dashboard that helps anticipate **landslide** and **flash flood** activity across four Himalayan regions of India: Ladakh, Himachal Pradesh, Uttarakhand and Jammu \& Kashmir. It uses spatial data on rivers, roads, glaciers and terrain.
 
-[!\[R](https://img.shields.io/badge/R-4.x-276DC3?logo=r\&logoColor=white)](https://www.r-project.org/)
-[!\[Shiny](https://img.shields.io/badge/built%20with-Shiny-blue)](https://shiny.posit.co/)
-[!\[Course](https://img.shields.io/badge/course-STAT3037A-orange)](#)
-!\[Status](https://img.shields.io/badge/status-in%20development-orange)
 
 <p align="center">
   <a href="https://YOUR-USERNAME.shinyapps.io/YOUR-APP-NAME/">
@@ -66,7 +62,7 @@ flowchart LR
 |3|**Uttarakhand**|Glacier-fed rivers and steep slopes, with a history of major flash floods|
 |4|**Jammu \& Kashmir**|Himalayan and Pir Panjal terrain, with river basins and road links vulnerable to slope failure and flooding|
 
-\---
+
 
 ## 🛠️ Project status
 
