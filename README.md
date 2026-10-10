@@ -2,7 +2,7 @@
   <img src="assets/banner.svg" alt="Landslide and Flash Flood Dashboard banner" width="100%">
 </p>
 
-# 🏔️ Landslide \& Flash Flood Early-Insight Dashboard
+# Landslide \& Flash Flood Early-Insight Dashboard
 
 An interactive R Shiny dashboard that helps anticipate **landslide** and **flash flood** activity across four Himalayan regions of India: Ladakh, Himachal Pradesh, Uttarakhand and Jammu \& Kashmir. It uses spatial data on rivers, roads, glaciers and terrain.
 
@@ -10,6 +10,14 @@ An interactive R Shiny dashboard that helps anticipate **landslide** and **flash
 [!\[Shiny](https://img.shields.io/badge/built%20with-Shiny-blue)](https://shiny.posit.co/)
 [!\[Course](https://img.shields.io/badge/course-STAT3037A-orange)](#)
 !\[Status](https://img.shields.io/badge/status-in%20development-orange)
+
+<p align="center">
+  <a href="https://YOUR-USERNAME.shinyapps.io/YOUR-APP-NAME/">
+    <img src="assets/banner.png" alt="Launch the dashboard" width="90">
+  </a>
+  <br>
+  <sub><b>Click the flag to launch the dashboard</b></sub>
+</p>
 
 
 
@@ -58,7 +66,7 @@ flowchart LR
 |3|**Uttarakhand**|Glacier-fed rivers and steep slopes, with a history of major flash floods|
 |4|**Jammu \& Kashmir**|Himalayan and Pir Panjal terrain, with river basins and road links vulnerable to slope failure and flooding|
 
-
+\---
 
 ## 🛠️ Project status
 
@@ -66,7 +74,7 @@ This dashboard is **under active development**.
 
 * \[x] Collect road, river and glacier datasets
 * \[x] Organise repository and documentation
-* \[ ] Clean and combine spatial layers for the four regions
+* \[x] Clean and combine spatial layers for the four regions
 * \[ ] Build the interactive map
 * \[ ] Add region comparison views
 * \[ ] Add hazard indicators
@@ -123,5 +131,5 @@ This is an academic project and **not an official early-warning system**. Do not
 
 ## 👥 Team
 
-STAT3037A project team: Hannah Venter, Oratilwe Tau, Sayeeda Naidoo, Nomzamo Dlomo.
+STAT3037A project team: Hannah Venter, Sayeeda Naido, Oratilwe Tau, Nomzamo Dlomo.
 
