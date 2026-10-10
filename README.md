@@ -30,7 +30,7 @@ An interactive R Shiny dashboard that helps anticipate **landslide** and **flash
 
 
 
-## 🔍 Overview
+## Overview
 
 Landslides and flash floods are among the most damaging hazards in mountainous and glacier-fed regions. This dashboard brings together river networks, road infrastructure and glacier data so users can explore where hazard activity is most likely and which routes are exposed.
 
@@ -79,7 +79,7 @@ This dashboard is **under active development**.
 
 
 
-## 🚀 Getting started
+## Getting started
 
 **Prerequisites:** R (version 4.2 or newer). RStudio is recommended.
 
