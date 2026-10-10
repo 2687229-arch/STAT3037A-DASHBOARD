@@ -17,7 +17,7 @@ An interactive R Shiny dashboard that helps anticipate **landslide** and **flash
 
 
 
-## 📑 Contents
+## Contents
 
 * [Overview](#-overview)
 * [Study regions](#-study-regions)
@@ -53,7 +53,7 @@ flowchart LR
 
 
 
-## 🗺️ Study regions
+## Study regions
 
 |#|Region|Why it matters|
 |-|-|-|
@@ -64,7 +64,7 @@ flowchart LR
 
 
 
-## 🛠️ Project status
+## Project status
 
 This dashboard is **under active development**.
 
@@ -91,7 +91,7 @@ shiny::runApp()
 
 
 
-## 🗂️ Data
+## Data
 
 Full source details are in the [`docs/`](docs/) folder.
 
@@ -103,7 +103,7 @@ Full source details are in the [`docs/`](docs/) folder.
 
 
 
-## 📁 Project structure
+## Project structure
 
 ```
 .
@@ -119,13 +119,13 @@ Full source details are in the [`docs/`](docs/) folder.
 
 
 
-## ⚠️ Limitations
+## Limitations
 
-This is an academic project and **not an official early-warning system**. Do not use it to make safety or evacuation decisions. Always follow guidance from national and local disaster management authorities.
+This is an academic project and **not an official early-warning system**. Please do not use it to make safety or evacuation decisions. Always follow guidance from national and local disaster management authorities.
 
 
 
-## 👥 Team
+## Team
 
 STAT3037A project team: Hannah Venter, Sayeeda Naido, Oratilwe Tau, Nomzamo Dlomo.
 
