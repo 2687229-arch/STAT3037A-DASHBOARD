@@ -71,9 +71,9 @@ This dashboard is **under active development**.
 * \[x] Collect road, river and glacier datasets
 * \[x] Organise repository and documentation
 * \[x] Clean and combine spatial layers for the four regions
-* \[ ] Build the interactive map
-* \[ ] Add region comparison views
-* \[ ] Add hazard indicators
+* \[x] Build the interactive map
+* \[x] Add region comparison views
+* \[x] Add hazard indicators
 * \[ ] Deploy the app online
 * \[ ] Add screenshots and a demo GIF
 
@@ -127,5 +127,5 @@ This is an academic project and **not an official early-warning system**. Please
 
 ## Team
 
-STAT3037A project team: Hannah Venter, Sayeeda Naido, Oratilwe Tau, Nomzamo Dlomo.
+STAT3037A project team: Hannah Venter, Sayeeda Naidoo, Oratilwe Tau, Nomzamo Dlomo.
 
