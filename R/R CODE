@@ -1,3 +1,500 @@
+CODE: BACKUP (17/10)
+library(shiny)
+library(sf)
+library(stars)
+library(leaflet)
+library(spdep)
+library(zip)
+library(future)
+library(promises)
+install.packages("waiter")
+library(waiter)
+
+plan(multisession) 
+
+glacierview_clean <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/glaciers_clip.shp", quiet = TRUE)
+Indiaview_clean   <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_isolated.shp", quiet = TRUE)
+Indiaview_reprojected <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/india_utm_43.shp", quiet =TRUE)
+Roads_clean <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_isolated_roads.shp", quiet=TRUE)
+Rivers_clean <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/river_utm_43.shp", quiet=TRUE)
+HPview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/HPview_utm_43.shp", quiet=TRUE)
+JKview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/JKview_utm_43.shp", quiet=TRUE)
+Lview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/Lview_utm_43.shp", quiet=TRUE)
+Uview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/Uview_utm_43.shp", quiet=TRUE)
+India_slope1 <- terra::rast("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_aspect.tif")
+India_aspect1 <- terra::rast("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_slope.tif")
+
+
+#Rewrite the names
+Indiaview_clean$shapeName <- gsub("[^[:alnum:] ]", "", 
+                                  enc2utf8(as.character(Indiaview_clean$shapeName)))
+Indiaview_reprojected$shapeName <-gsub("[^[:alnum:] ]", "", 
+                                       enc2utf8(as.character(Indiaview_reprojected$shapeName)))
+glacierview_clean$shapeName <-gsub("[^[:alnum:] ]", "", 
+                                   enc2utf8(as.character(glacierview_clean$shapeName)))
+#Reduce the resolution
+India_slope_50 <- terra::aggregate(India_slope1, fact = 50)
+India_aspect_50 <- terra::aggregate(India_aspect1, fact = 50)
+
+#This displays the resolution
+India_slope_res <- st_as_stars(India_slope_50)
+India_aspect_res <- st_as_stars(India_aspect_50)
+
+#Reproject to WGS 1984 4326 (as Leaflet only operates using this)
+Indiaview_1984<- st_transform(Indiaview_clean, 4326)
+Indiaview_full_1984 <- st_transform(Indiaview_reprojected, 4326)
+Glacierview_1984 <- st_transform(glacierview_clean, 4326)
+Roadsview_1984 <- st_transform(Roads_clean, 4326)
+Riverview_1984 <- st_transform(Rivers_clean, 4326)
+HPview_1984 <-st_transform(HPview_clean1, 4326)
+JKview_1984 <-st_transform(JKview_clean1, 4326)
+Lview_1984 <-st_transform(Lview_clean1, 4326)
+Uview_1984 <-st_transform(Uview_clean1, 4326)
+
+# --- UI ---
+ui <- fluidPage(
+  titlePanel("Spatial Analysis Dashboard"),
+  use_waiter(),
+  fluidRow(
+    column(width = 12,
+           tabsetPanel(
+             tabPanel("Background",
+                      h2("Background"),
+                      p("This section introduces the context of the project, the study area, and the motivation for the analysis.")
+             ),
+             
+             tabPanel("Statistical Methods",
+                      h2("Statistical Methods"),
+                      h3("Kernel Density Estimation (KDE)"),
+                      p("Describe KDE method, purpose, parameters, and results."),
+                      h3("Local Indicators of Spatial Association (LISA)"),
+                      p("Describe LISA method, purpose, parameters, and results."),
+                      h3("K-Nearest Neighbours (KNN)"),
+                      p("Describe KNN method, purpose, parameters, and results.")
+             ),
+             
+             tabPanel("Dashboard",
+                      fluidRow(
+                        column(width = 8,
+                               leafletOutput("map", width = "100%", height = "600px")
+                        ),
+                        column(width = 4,
+                               tabsetPanel(
+                                 tabPanel("LISA Analysis",
+                                          selectInput("regions_selected", "Select Regions:",
+                                                      choices = sort(unique(Indiaview_1984$shapeName)),
+                                                      multiple = TRUE),
+                                          selectInput("glaciers_selected", "Select Glacier Dataset:",
+                                                      choices = c("Glaciers of the Himalayas")),
+                                          selectInput("contiguity_selected", "Select Contiguity Type:",
+                                                      choices = c("Queen","Rook","KNN")),
+                                          selectInput("output_format", "Select Output Format:",
+                                                      choices = c("CSV","Shapefile","GeoJSON")),
+                                          actionButton("run_lisa", "Run LISA Analysis"),
+                                          downloadButton("download_lisa", "Download LISA Results")
+                                 ),
+                                 tabPanel("Disaster Risk",
+                                          selectInput("river_distance","Distance to Rivers:",
+                                                      choices=c("500 m"=500,"1000 m"=1000,"2000 m"=2000)),
+                                          selectInput("glacier_radius","Search Radius from Glaciers:",
+                                                      choices=c("1000 m"=1000,"2000 m"=2000)),
+                                          sliderInput("slope_range","Slope (degrees):",min=0,max=60,value=c(0,30)),
+                                          actionButton("run_risk","Run Disaster Risk")
+                                 ),
+                                 tabPanel("Evacuation",
+                                          selectInput("road_distance","Distance to Roads:",
+                                                      choices=c("500 m - Ideal"=500,"1000 m - Highly Suitable"=1000)),
+                                          actionButton("run_evacuation","Run Evacuation")
+                                 )
+                               )
+                        )
+                      )
+             ),
+             
+             tabPanel("Sources",
+                      h2("Sources"),
+                      p("List references, datasets, and literature used in the project.")
+             ),
+             
+             tabPanel("Metadata",
+                      h2("Metadata"),
+                      p("Provide dataset information, CRS, resolution, collection date, and limitations.")
+             )
+           )
+    )
+  )
+)
+
+# --- Server ---
+server <- function(input, output, session) {
+  
+  # Base map
+  output$map <- renderLeaflet({
+    leaflet() %>%
+      addProviderTiles("Esri.WorldImagery") %>%
+      addRasterImage(India_slope_50, colors = terrain.colors(100), group = "Slope") %>%
+      addRasterImage(India_aspect_50, colors = topo.colors(100), group = "Aspect") %>%
+      addPolygons(data = Indiaview_1984, fillColor="gray",color="black",
+                  weight=1, group="Regions of India Near the Himalayas") %>%
+      addPolylines(data = Indiaview_full_1984, color="black", weight=2, group="Map of India") %>%
+      addCircleMarkers(data = Glacierview_1984, radius=0.5, fillColor="white",color="black", weight=1, fillOpacity=1, 
+                       opacity=1, group="Glaciers of the Himalayas") %>%
+      addPolylines(data = Roadsview_1984 %>% dplyr::filter(rdtype == "National Highway"),
+                   color = "yellow", weight = 1.5, group = "National Highways") %>%
+      addPolylines(data=Roadsview_1984 %>% dplyr::filter(rdtype == "State Highway"),
+                   color = "white", weight = 1, group = "State Highways" ) %>%
+      addPolylines(data = Riverview_1984, color="darkblue", weight=1, group="Rivers") %>%
+      addPolygons(data = HPview_1984, fillColor="#7A4988",color="black", weight=1, group="Himachal Pradesh") %>%
+      addPolygons(data = JKview_1984, fillColor="purple", color="black",weight=1, group="Jammu and Kashmir") %>%
+      addPolygons(data = Lview_1984, fillColor="magenta",color="black",weight=1, group="Ladakh") %>%
+      addPolygons(data = Uview_1984, fillColor="pink",color="black",weight=1, group="Uttarakhand") %>%
+      addLegend(position = "bottomleft",
+                colors = c("gray", "#7A4988","purple","magenta","pink","yellow",
+                           "white","darkblue","aliceblue"), 
+                labels = c("Regions", "Himachel Pradesh","Jammu and Kashmir","Ladakh","Uttarakhand",
+                           "National Highway","State Highway","Rivers", "Glaciers"),
+                title = "Map Layers") %>%
+      addLayersControl(overlayGroups = c("Outline of India","Regions of India Near the Himalayas",
+                                         "Himachal Pradesh","Jammu and Kashmir",
+                                         "Ladakh","Uttarakhand","National Highways", "State Highways","Slope", "Aspect",
+                                         "Rivers","Glaciers of the Himalayas"),
+                       options = layersControlOptions(collapsed = FALSE))
+     
+  })
+  
+  lisa_results <- reactiveVal(NULL)
+  # --- LISA Analysis (with progress bar) ---
+  observeEvent(input$run_lisa, {
+    selected_regions <- Indiaview_1984 %>% dplyr::filter(shapeName %in% input$regions_selected)
+    if (nrow(selected_regions) == 0) {
+      showNotification("No matching regions found.", type="error"); return()
+    }
+    
+    # Show progress bar
+    withProgress(message = "Running LISA analysis...", value = 0, {
+      
+      # Step 1: Build neighbors
+      incProgress(0.3, detail = "Building spatial weights...")
+      nb <- if (input$contiguity_selected == "Queen") {
+        poly2nb(selected_regions, queen = TRUE)
+      } else if (input$contiguity_selected == "Rook") {
+        poly2nb(selected_regions, queen = FALSE)
+      } else {
+        coords <- st_coordinates(st_centroid(selected_regions))
+        knn2nb(knearneigh(coords, k = 4))
+      }
+      
+      # Step 2: Create weights
+      incProgress(0.6, detail = "Computing weights...")
+      lw <- nb2listw(nb, style="W")
+      
+      # Step 3: Run LISA
+      incProgress(0.9, detail = "Running local Moran's I...")
+      x <- as.numeric(selected_regions$your_numeric_column)  # replace with actual numeric field
+      lisa_result <- localmoran(x, lw)
+      
+      # Step 4: Update results
+      incProgress(1, detail = "Updating map...")
+      selected_regions$lisa_cluster <- lisa_result[,5]
+      lisa_results(selected_regions)
+      
+      leafletProxy("map") %>%
+        clearGroup("LISA") %>%
+        addPolygons(data = selected_regions,
+                    fillColor = ~colorFactor(c("red","blue","pink","lightblue"),
+                                             selected_regions$lisa_cluster)(lisa_cluster),
+                    color="black", weight=1, group="LISA",
+                    popup=~paste("Region:", shapeName, "<br>",
+                                 "Cluster:", lisa_cluster))
+    })
+    
+    showNotification("LISA analysis complete!", type = "message", duration = 5)
+  })
+  
+  
+
+  # --- Download Handler ---
+  output$download_lisa <- downloadHandler(
+    filename = function() {
+      fmt <- input$output_format
+      ext <- switch(fmt,
+                    "CSV" = ".csv",
+                    "Shapefile" = ".zip",
+                    "GeoJSON" = ".geojson")
+      paste0("LISA_results_", Sys.Date(), ext)
+    },
+    content = function(file) {
+      results <- lisa_results()
+      if (is.null(results)) return()
+      fmt <- input$output_format
+      if (fmt == "CSV") {
+        write.csv(st_drop_geometry(results), file, row.names = FALSE)
+      } else if (fmt == "Shapefile") {
+        tmpdir <- tempdir()
+        shpfile <- file.path(tmpdir, "LISA_results.shp")
+        st_write(results, shpfile, delete_layer = TRUE)
+        zip::zip(file, files = list.files(tmpdir, pattern="LISA_results", full.names=TRUE))
+      } else if (fmt == "GeoJSON") {
+        st_write(results, file, driver = "GeoJSON", delete_layer = TRUE)
+      }
+    }
+  )
+  
+  # --- Disaster Risk ---
+  observeEvent(input$run_risk, {
+    river_buffer <- st_buffer(Rivers_clean, dist = as.numeric(input$river_distance)) |> 
+      st_union() |> st_sf()
+    glacier_buffer <- st_buffer(glacierview_clean, dist = as.numeric(input$glacier_radius)) |> 
+      st_union() |> st_sf()
+    
+    river_buffer_1984 <- st_transform(river_buffer, 4326)
+    glacier_buffer_1984 <- st_transform(glacier_buffer, 4326)
+    
+    leafletProxy("map") %>%
+      clearGroup("River Risk Distance") %>%
+      clearGroup("Glacier Search Radius") %>%
+      addPolygons(data = river_buffer_1984,
+                  color = "blue", weight = 2,
+                  fillColor = "blue", fillOpacity = 0.2,
+                  group = "River Risk Distance") %>%
+      addPolygons(data = glacier_buffer_1984,
+                  color = "red", weight = 2,
+                  fillColor = "red", fillOpacity = 0.2,
+                  group = "Glacier Search Radius")
+    
+    showNotification(
+      paste("Disaster Risk Analysis:",
+            "River Distance =", input$river_distance, "m |",
+            "Glacier Radius =", input$glacier_radius, "m |",
+            "Slope =", input$slope_range[1], "to", input$slope_range[2], "degrees"),
+      type = "message", duration = 5
+    )
+  })
+  
+  # --- Evacuation ---
+  observeEvent(input$run_evacuation, {
+    road_buffer <- st_buffer(Roads_clean, dist = as.numeric(input$road_distance)) |> 
+      st_union() |> st_sf()
+    road_buffer_1984 <- st_transform(road_buffer, 4326)
+    
+    leafletProxy("map") %>%
+      clearGroup("Evacuation Road Distance") %>%
+      addPolygons(data = road_buffer_1984,
+                  color = "green", weight = 2,
+                  fillColor = "green", fillOpacity = 0.2,
+                  group = "Evacuation Road Distance",
+                  popup = paste("Distance:", input$road_distance, "m"))
+    
+    showNotification(
+      paste("Evacuation Analysis:", input$road_distance, "m from road"),
+      type = "message", duration = 5
+    )
+  })
+}
+
+# --- Run the app ---
+shinyApp(ui = ui, server = server)
+
+
+
+CODE (BACKUP) 13/10
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    https://shiny.posit.co/
+#
+
+library(shiny)
+library(sf)
+library(stars)
+library(leaflet)
+
+glacierview_clean <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/glaciers_clip.shp", quiet = TRUE)
+Indiaview_clean   <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_isolated.shp", quiet = TRUE)
+Indiaview_reprojected <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/india_utm_43.shp", quiet =TRUE)
+Roads_clean <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_isolated_roads.shp", quiet=TRUE)
+Rivers_clean <-st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/river_utm_43.shp", quiet=TRUE)
+HPview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/HPview_utm_43.shp", quiet=TRUE)
+JKview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/JKview_utm_43.shp", quiet=TRUE)
+Lview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/Lview_utm_43.shp", quiet=TRUE)
+Uview_clean1 <- st_read("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/Uview_utm_43.shp", quiet=TRUE)
+India_slope1 <- terra::rast("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_aspect.tif")
+India_aspect1 <- terra::rast("C:/Users/Hannah/OneDrive/THE UNIVERSITY OF THE WITWATERSRAND 2024-/THIRD YEAR (SEMESTER TWO) (2026)/Spatial Stats/India_slope.tif")
+
+
+#Rewrite the names
+Indiaview_clean$shapeName <- gsub("[^[:alnum:] ]", "", 
+                                    enc2utf8(as.character(Indiaview_clean$shapeName)))
+Indiaview_reprojected$shapeName <-gsub("[^[:alnum:] ]", "", 
+                                       enc2utf8(as.character(Indiaview_reprojected$shapeName)))
+glacierview_clean$shapeName <-gsub("[^[:alnum:] ]", "", 
+                                  enc2utf8(as.character(glacierview_clean$shapeName)))
+#Reduce the resolution
+India_slope_50 <- terra::aggregate(India_slope1, fact = 50)
+India_aspect_50 <- terra::aggregate(India_aspect1, fact = 50)
+
+#This displays the resolution
+India_slope_res <- st_as_stars(India_slope_50)
+India_aspect_res <- st_as_stars(India_aspect_50)
+
+#Reproject to WGS 1984 4326 (as Leaflet only operates using this)
+Indiaview_1984<- st_transform(Indiaview_clean, 4326)
+Indiaview_full_1984 <- st_transform(Indiaview_reprojected, 4326)
+Glacierview_1984 <- st_transform(glacierview_clean, 4326)
+Roadsview_1984 <- st_transform(Roads_clean, 4326)
+Riverview_1984 <- st_transform(Rivers_clean, 4326)
+HPview_1984 <-st_transform(HPview_clean1, 4326)
+JKview_1984 <-st_transform(JKview_clean1, 4326)
+Lview_1984 <-st_transform(Lview_clean1, 4326)
+Uview_1984 <-st_transform(Uview_clean1, 4326)
+
+ui <- fluidPage(
+  titlePanel("An App of the Northern Himalayan Regions of India indicating the Glacier Risk"),
+  fluidRow(
+      column(width = 8,
+           leafletOutput("map", width = "100%", height = "600px")
+    ),
+ #Control Panel
+    column(width = 4,
+           h3("LISA Controls"),
+           
+           selectInput("regions_selected", "Select Regions:",
+                       choices = c("Himachal Pradesh","Jammu and Kashmir","Ladakh","Uttarakhand"),
+                       multiple = TRUE, selectize = TRUE),
+           
+           selectInput("glaciers_selected", "Select Glacier Dataset:",
+                       choices = c("Glaciers of the Himalayas"),
+                       multiple = FALSE, selectize = TRUE),
+           
+           selectInput("contiguity_selected", "Select Contiguity Type:",
+                       choices = c("Queen","Rook","KNN"),
+                       multiple = FALSE, selectize = TRUE),
+           
+           selectInput("output_format", "Select Output Format:",
+                       choices = c("CSV","Shapefile","GeoJSON"),
+                       multiple = FALSE, selectize = TRUE),
+           
+           actionButton("run_lisa", "Run LISA Analysis"),
+           downloadButton("download_lisa", "Download LISA Results")
+    )
+  )
+)
+
+
+
+server <- function(input, output) {
+  output$map <- renderLeaflet({
+    leaflet() %>%
+      addProviderTiles("Esri.WorldImagery") %>%
+      addRasterImage(India_slope_50, colors = terrain.colors(100), group = "Slope") %>%
+      addRasterImage(India_aspect_50, colors = topo.colors(100), group = "Aspect") %>%
+      addPolygons(data = Indiaview_1984, fillColor="gray",color="black",
+                  weight=1, group="Regions of India Near the Himalayas") %>%
+      addPolylines(data = Indiaview_full_1984, color="black", weight=2, group="Map of India") %>%
+      addCircleMarkers(data = Glacierview_1984, radius=0.5, fillColor="white",color="black", weight=1, fillOpacity=1, 
+                       opacity=1, group="Glaciers of the Himalayas") %>%
+      addPolylines(data = Roadsview_1984 %>% dplyr::filter(rdtype == "National Highway"),
+                   color = "yellow", weight = 1.5, group = "National Highways") %>%
+      addPolylines(data=Roadsview_1984 %>% dplyr::filter(rdtype == "State Highway"),
+                   color = "white", weight = 1, group = "State Highways" ) %>%
+      addPolylines(data = Riverview_1984, color="darkblue", weight=1, group="Rivers") %>%
+      addPolygons(data = HPview_1984, fillColor="#7A4988",color="black", weight=1, group="Himachal Pradesh") %>%
+      addPolygons(data = JKview_1984, fillColor="purple", color="black",weight=1, group="Jammu and Kashmir") %>%
+      addPolygons(data = Lview_1984, fillColor="magenta",color="black",weight=1, group="Ladakh") %>%
+      addPolygons(data = Uview_1984, fillColor="pink",color="black",weight=1, group="Uttarakhand") %>%
+      addLegend(position = "bottomleft",
+                colors = c("gray", "#7A4988","purple","magenta","pink","yellow",
+                           "white","darkblue","aliceblue"), 
+                labels = c("Regions", "Himachel Pradesh","Jammu and Kashmir","Ladakh","Uttarakhand",
+                           "National Highway","State Highway","Rivers", "Glaciers"),
+                title = "Map Layers") %>%
+      addLayersControl(overlayGroups = c("Outline of India","Regions of India Near the Himalayas",
+                                         "Himachal Pradesh","Jammu and Kashmir",
+                                         "Ladakh","Uttarakhand","National Highways", "State Highways","Slope", "Aspect",
+                                         "Rivers","Glaciers of the Himalayas"),
+                       options = layersControlOptions(collapsed = FALSE))
+  })
+  lisa_results <- reactiveVal(NULL)  # store results
+  
+  observeEvent(input$run_lisa, {
+    # Validation checks
+    if (length(input$regions_selected) < 1) {
+      showNotification("Select at least one region.", type="error"); return()
+    }
+    if (length(input$regions_selected) > 4) {
+      showNotification("You can select a maximum of four regions.", type="error"); return()
+    }
+    if (input$glaciers_selected == "") {
+      showNotification("Select a glacier dataset.", type="error"); return()
+    }
+    if (input$contiguity_selected == "") {
+      showNotification("Select a contiguity type.", type="error"); return()
+    }
+    
+    # --- Step 1: Subset regions ---
+    selected_regions <- Indiaview_1984 %>%
+      dplyr::filter(shapeName %in% input$regions_selected)
+    
+    # --- Step 2: Build spatial weights ---
+    nb <- if (input$contiguity_selected == "Queen") {
+      spdep::poly2nb(selected_regions, queen = TRUE)
+    } else if (input$contiguity_selected == "Rook") {
+      spdep::poly2nb(selected_regions, queen = FALSE)
+    } else {
+      coords <- sf::st_coordinates(sf::st_centroid(selected_regions))
+      spdep::knn2nb(spdep::knearneigh(coords, k = 4))
+    }
+    lw <- spdep::nb2listw(nb, style="W")
+    
+    # --- Step 3: Run LISA ---
+    lisa_result <- spdep::localmoran(selected_regions$glacier_density, lw)
+    selected_regions$lisa_cluster <- lisa_result[,5]
+    
+    # Store results
+    lisa_results(selected_regions)
+    
+    # --- Step 4: Update map ---
+    leafletProxy("map") %>%
+      clearGroup("LISA") %>%
+      addPolygons(data = selected_regions,
+                  fillColor = ~colorFactor(c("red","blue","lightgray","darkgray"),
+                                           selected_regions$lisa_cluster)(lisa_cluster),
+                  color="black", weight=1, group="LISA",
+                  popup=~paste("Region:", shapeName, "<br>",
+                               "Cluster:", lisa_cluster))
+  })
+  
+  # --- Step 5: Download Handler ---
+  output$download_lisa <- downloadHandler(
+    filename = function() {
+      fmt <- input$output_format
+      paste0("LISA_results_", Sys.Date(), 
+             if (fmt == "CSV") ".csv" else if (fmt == "Shapefile") ".zip" else ".geojson")
+    },
+    content = function(file) {
+      results <- lisa_results()
+      if (is.null(results)) return()
+      
+      fmt <- input$output_format
+      if (fmt == "CSV") {
+        write.csv(sf::st_drop_geometry(results), file, row.names = FALSE)
+      } else if (fmt == "Shapefile") {
+        # Shapefile requires multiple files, so save to a temp dir and zip
+        tmpdir <- tempdir()
+        shpfile <- file.path(tmpdir, "LISA_results.shp")
+        sf::st_write(results, shpfile, delete_layer = TRUE)
+        zip::zip(file, files = list.files(tmpdir, pattern="LISA_results", full.names=TRUE))
+      } else if (fmt == "GeoJSON") {
+        sf::st_write(results, file, driver = "GeoJSON", delete_layer = TRUE)
+      }
+    }
+  )
+}
+
+
+
 FINAL CODE (01/10)
 #CLEANING
 #Input of Datasets (25/09)-(01/10)
@@ -1214,6 +1711,117 @@ shinyApp(
   ui = ui,
   server = server
 )
+
+#=======================================================================
+
+library(shiny)
+
+ui <- fluidPage(
+
+  # Website title
+  titlePanel("Spatial Analysis Dashboard"),
+
+  # Navigation tabs
+  tabsetPanel(
+
+    # TAB 1: Created by Hannah
+    tabPanel(
+      "Tab 1",
+      h2("Section 1"),
+      p("This section will be completed by hannah.")
+    ),
+
+    # TAB 2: Statistical Methods
+    tabPanel(
+      "Statistical Methods",
+
+      h2("Statistical Methods"),
+      p("This section describes the statistical methods used in the analysis."),
+
+      # KDE section
+      h3("Kernel Density Estimation (KDE)"),
+      wellPanel(
+        p("Placeholder for KDE information."),
+        p("Add the method description, purpose, parameters and results here.")
+      ),
+
+      # LISA section
+      h3("Local Indicators of Spatial Association (LISA)"),
+      wellPanel(
+        p("Placeholder for LISA information."),
+        p("Add the method description, purpose, parameters and results here.")
+      ),
+
+      # KNN section
+      h3("K-Nearest Neighbours (KNN)"),
+      wellPanel(
+        p("Placeholder for KNN information."),
+        p("Add the method description, purpose, parameters and results here.")
+      )
+    ),
+
+    # TAB 3: Dashboard link
+    tabPanel(
+      "Dashboard",
+
+      h2("Interactive Dashboard"),
+      p("Access the interactive spatial analysis dashboard below."),
+
+      # Replace the URL with dashboard link
+      a(
+        "Open Dashboard",
+        href = "https://example.com",
+        target = "_blank",
+        class = "btn btn-primary"
+      ),
+
+      br(),
+      br(),
+      p("Replace the example URL with the published dashboard link.")
+    ),
+
+    # TAB 4: Created by Hannah
+    tabPanel(
+      "Tab 4",
+      h2("Section 4"),
+      p("This section will be completed by hannah.")
+    ),
+
+    # TAB 5: Metadata
+    tabPanel(
+      "Metadata",
+
+      h2("Data Metadata"),
+      p("Placeholder for information about the datasets used in this project."),
+
+      h3("Dataset Information"),
+      wellPanel(
+        p("Dataset name: To be added"),
+        p("Data source: To be added"),
+        p("Spatial resolution: To be added"),
+        p("Coordinate reference system (CRS): To be added"),
+        p("Date of data collection: To be added")
+      ),
+
+      h3("Data Processing"),
+      wellPanel(
+        p("Placeholder for data cleaning, processing and preparation details.")
+      ),
+
+      h3("Data Limitations"),
+      wellPanel(
+        p("Placeholder for data quality issues, limitations and assumptions.")
+      )
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  # Add server-side functionality here if required
+}
+
+shinyApp(ui = ui, server = server)
+
 
 
 
