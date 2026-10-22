@@ -9,7 +9,7 @@ An interactive R Shiny dashboard that helps anticipate **landslide** and **flash
 
 
 <p align="center">
-  <a href="https://YOUR-USERNAME.shinyapps.io/YOUR-APP-NAME/">
+  <a href="https://hv21.shinyapps.io/STAT3037A_APP1/">
     <img src="assets/banner.png" alt="Launch the dashboard" width="90">
   </a>
   <br>
