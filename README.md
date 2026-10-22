@@ -53,7 +53,7 @@ To identify settlements susceptible to glacial collapse and flash floods, based 
 - description
 
 <p align="center">
-  <img src="assets/Screenshot.png" alt="Dashboard screenshot" width="100%">
+  <img src="assets/Screenshot.png" alt="Dashboard Screenshot" width="100%">
 </p>
 
 <details open>
