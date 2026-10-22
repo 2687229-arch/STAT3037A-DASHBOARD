@@ -1,7 +1,7 @@
 <p align="center">
 <<<<<<< HEAD
   <a href="https://hv21.shinyapps.io/STAT3037A_APP1/">
-    <img src="assets/banner.svg" alt="Landslide and Flash Flood Dashboard banner" width="100%">
+    <img src="assets/banner.svg" alt="Glacier Collapse in India" width="100%">
   </a>
 =======
   <img src="assets/banner.svg" alt="Glacier Collapse in India" width="100%">
@@ -39,6 +39,16 @@ An interactive R Shiny dashboard that helps anticipate **landslide** and **flash
 ## Overview
 
 Landslides and flash floods are among the most damaging hazards in mountainous and glacier-fed regions. This dashboard brings together river networks, road infrastructure and glacier data so users can explore where hazard activity is most likely and which routes are exposed.
+ 
+## Aim
+To identify settlements susceptible to glacial collapse and flash floods, based on their distance from glaciers, so authorities can plan evacuation or relocation early. 
+
+##Objectives
+* Map glaciers and glacial lakes across Ladakh, Uttarakhand, Himachal Pradesh and Jammu & Kashmir. 
+
+* Measure the distance from settlements to glaciers, along rivers and roads, to rank which communities face the highest risk. 
+
+* Give government and planners a reproducible, interactive tool to prioritise evacuation and relocation planning
 
 **What you can do with it**
 
@@ -130,7 +140,7 @@ Full source details are in the [`docs/`](docs/) folder.
 
 
 
-## Limitations
+## Disclaimer
 
 This is an academic project and **not an official early-warning system**. Please do not use it to make safety or evacuation decisions. Always follow guidance from national and local disaster management authorities.
 
