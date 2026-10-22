@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Landslide and Flash Flood Dashboard banner" width="100%">
+  <img src="assets/banner.svg" alt="Glacier Collapse in India" width="100%">
 </p>
 
 # Landslide \& Flash Flood Early-Insight Dashboard
@@ -74,7 +74,7 @@ This dashboard is **under active development**.
 * \[x] Build the interactive map
 * \[x] Add region comparison views
 * \[x] Add hazard indicators
-* \[ ] Deploy the app online
+* \[x] Deploy the app online
 * \[ ] Add screenshots and a demo GIF
 
 
