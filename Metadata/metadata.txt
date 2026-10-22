@@ -1,0 +1,21 @@
+#Glacier Data
+https://www.glims.org/maps/glims <- accessed 23/09
+#India Shapefile
+https://data.humdata.org/dataset/geoboundaries-admin-boundaries-for-india <-accessed 24/09
+#India Roads and Water Data- DOES NOT COVER GROUP BOUNDARY
+National Water Data Portal. 2025. Accessed 23 September 2026 via: https://nwdp.nwic.gov.in/dataset/river-line. 
+#India Villages: Settlements Data
+National Water Data Portal- Village Boundary Dataset. Accessed 22 September 2026 via: https://nwdp.nwic.gov.in/dataset/village-boundary.
+#DEM
+Copernicus DEM (30m): Earth Engine Data Catalog: Copernicus DEM GLO-30
+https://browser.dataspace.copernicus.eu/?zoom=7&lat=33.06853&lng=77.7832&themeId=DEFAULT-THEME&visualizationUrl=U2FsdGVkX1%2FSvdRpSLOxRLlxQzp%2FrVgR4DrP6McYXbwn94RwK6%2B64vbsTh7UcfBC2U4CD9D8uVmStvzEmYh3MJPK57bpIIIuysM7mtX2X4WYm0q9mBPxiNL9%2FAmiklTC&datasetId=DEM_COPERNICUS_90_CDAS&fromTime=2011-06-12T00%3A00%3A00.000Z&toTime=2011-06-12T23%3A59%3A59.999Z&layerId=1_TOPOGRAPHIC
+#LULC
+ESA WorldCover (10m): Earth Engine Data Catalog: ESA WorldCover 10m v200
+https://developers.google.com/earth-engine/datasets/catalog/ESA_WorldCover_v200
+#UPDATED ROADS AND RIVERS DATA
+#Roads
+https://www.arcgis.com/home/item.html?id=e33dfe4d58ec4a0c9c331a6d92894ba5#overview <-accessed 28/09
+#Rivers
+https://www.arcgis.com/home/item.html?id=fe671cae538b4196876c8677fc0be0cc#overview <- accessed 28/09
+#REPOSITORY TEMPLATE
+https://github.com/github/india <- accessed 28/09

@@ -1,8 +1,10 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Landslide and Flash Flood Dashboard banner" width="100%">
+  <a href="https://hv21.shinyapps.io/STAT3037A_APP1/">
+    <img src="assets/banner.svg" alt="Landslide and Flash Flood Dashboard banner" width="100%">
+  </a>
 </p>
 
-# Landslide \& Flash Flood Early-Insight Dashboard
+# Glacier Collapse in India
 
 An interactive R Shiny dashboard that helps anticipate **landslide** and **flash flood** activity across four Himalayan regions of India: Ladakh, Himachal Pradesh, Uttarakhand and Jammu \& Kashmir. It uses spatial data on rivers, roads, glaciers and terrain.
 
