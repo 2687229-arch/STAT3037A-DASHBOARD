@@ -61,7 +61,7 @@ To identify settlements susceptible to glacial collapse and flash floods, based 
 
 ```mermaid
 flowchart LR
-    A[Source data] --> B[Cleaning in R] --> C[Spatial layers] --> D[Shiny dashboard] --> E[Explore hazard areas]
+    A[Background] --> B[Statistical methods] --> C[Dashboard] --> D[Sources] --> E[Metadata]
 ```
 
 </details>
