@@ -1,0 +1,1154 @@
+#1 Libraries Loaded
+library(shiny)
+library(sf)
+library(leaflet)
+library(spdep)
+library(zip)
+library(dplyr)
+library(shinyBS)
+
+#2 Before performing the app completely, most of the raster processing is moved to occupy the predicted maximum occupation of the disk at 25%
+terra::terraOptions(memfrac = 0.25)
+
+#3 Load the data from the App and Data folders
+#Identify the respective directories
+app_dir  <- getwd()
+data_dir <- file.path(app_dir, "data")
+
+#Locate each file, in spite of its casing
+find_data <- function(f) {
+  p <- file.path(data_dir, f)
+  if (file.exists(p)) return(p)
+  all <- list.files(data_dir, full.names = TRUE)
+  hit <- all[tolower(basename(all)) == tolower(f)]
+  if (length(hit) == 0) NULL else hit[1]
+}
+
+needed <- c("app_data.rds", "India_slope_small.tif")
+miss <- needed[vapply(needed, function(f) is.null(find_data(f)), logical(1))]
+if (length(miss) > 0) {
+  stop("Data folder '", data_dir, "' (working directory: ", getwd(), ") is missing: ",
+       paste(miss, collapse = ", "),
+       ". Run preprocess.R locally, then deploy the 'data' folder together with app.R.", call. = FALSE)
+}
+
+dat <- readRDS(find_data("app_data.rds"))
+
+#Here, the app reads each dataset once. For performing LISA, the detailed four regions polygons are accessed directly from the disk. 
+required <- c("glacier_wgs", "roads_wgs", "rivers_wgs", "roads_display", "rivers_display",
+              "india_wgs", "villages_attr", "nb_queen", "nb_rook", "villages_display",
+              "region_outlines", "risk_bb", "slope_rng")
+if (!all(required %in% names(dat))) {
+  stop("data/app_data.rds is out of date (missing: ", paste(setdiff(required, names(dat)), collapse = ", "),
+       "). Re-run preprocess.R and redeploy the new data folder.", call. = FALSE)
+}
+
+#These files are represented in WGS 1984 form in the leaflet output, but is reprojected for analysis.
+#The simplified outputs are drawn onto the map, but the detailed versions are used for analysis. 
+glacierview_clean   <- dat$glacier_wgs      
+Roads_clean         <- dat$roads_wgs
+Rivers_clean        <- dat$rivers_wgs
+Glacierview_1984    <- dat$glacier_wgs     
+Roadsview_1984      <- dat$roads_display    
+Riverview_1984      <- dat$rivers_display  
+Indiaview_full_1984 <- dat$india_wgs
+Villages_attr       <- dat$villages_attr    #This stores the attributes separately
+nb_queen            <- dat$nb_queen         #Neighbour lists for Queen and Rook, which is identified from the data folder
+nb_rook             <- dat$nb_rook
+risk_bb             <- dat$risk_bb          #Here are the bounding boxes using the four regions
+slope_rng           <- dat$slope_rng
+
+#For The Choropleth and LISA Analysis Tab, the following data loading was performed: 
+#Simplified village polygons for map display 
+Villages_disp <- dat$villages_display
+
+#For each region, the full names are retained once LISA is downloaded
+region_slug <- c("Himachal Pradesh" = "hp", "Jammu and Kashmir" = "jk", "Ladakh" = "lu", "Uttarakhand" = "uu")
+
+#The four regions are enforced as an outline to prevent the detailed ones from impacting the processing
+if (is.null(dat$region_outlines)) {
+  stop("data/app_data.rds is out of date (it has no region outlines). ",
+       "Re-run preprocess.R and redeploy the new app_data.rds.", call. = FALSE)
+}
+
+
+#For Leaflet, only the main polygons are kept. Invalid ones are not visualised. 
+Regions_1984 <- suppressWarnings(sf::st_collection_extract(sf::st_make_valid(dat$region_outlines), "POLYGON"))
+Regions_1984 <- Regions_1984[!sf::st_is_empty(Regions_1984), ]
+HPview_1984 <- Regions_1984[Regions_1984$region == "Himachal Pradesh", ]
+JKview_1984 <- Regions_1984[Regions_1984$region == "Jammu and Kashmir", ]
+Lview_1984  <- Regions_1984[Regions_1984$region == "Ladakh", ]
+Uview_1984  <- Regions_1984[Regions_1984$region == "Uttarakhand", ]
+rm(dat); invisible(gc())  
+
+#The Slope raster is simplified to prevent ineffectual loading
+India_slope_50  <- terra::rast(find_data("India_slope_small.tif"))
+India_slope1    <- India_slope_50      
+
+#For the Glacier Exposure and Road Evacuation tabs, the following data loading was performed: 
+
+#The pre-calculated grid is now loaded and built on-demand, with respect to what the user chooses.
+make_template <- function(res) {
+  terra::rast(
+    xmin = min(sapply(risk_bb, function(b) b[["xmin"]])),
+    xmax = max(sapply(risk_bb, function(b) b[["xmax"]])),
+    ymin = min(sapply(risk_bb, function(b) b[["ymin"]])),
+    ymax = max(sapply(risk_bb, function(b) b[["ymax"]])),
+    resolution = res, crs = "EPSG:32643")
+}
+
+#The coarsest cell size is selected as automatic, such as at 500 metres, or 1000 metres
+pick_res <- function(dist_m, choice) {
+  if (!identical(choice, "auto")) return(as.numeric(choice))
+  ok <- c(500, 250, 100, 50)
+  ok <- ok[ok <= dist_m / 2]
+  if (length(ok) == 0) 50 else max(ok)
+}
+
+# For IDW squared, the if a grid is missing, a run of this happens once
+idw2_score <- function(dist_r, D, d0) {
+  d_eff <- terra::ifel(dist_r < d0, d0, dist_r)
+  terra::ifel(dist_r <= D, (1 / d_eff^2 - 1 / D^2) / (1 / d0^2 - 1 / D^2), 0)
+}
+
+#Quartic KDE is loaded here
+kde_quartic <- function(counts, h, res) {
+  k <- ceiling(h / res)
+  ax <- (-k:k) * res
+  d  <- sqrt(outer(ax^2, ax^2, "+"))
+  w  <- ifelse(d < h, (3 / pi) * (1 - (d / h)^2)^2 / h^2 * 1e6, 0)
+  terra::focal(counts, w = w, fun = "sum", na.rm = TRUE)
+}
+
+#Below, colour-blind safe options are loaded for the Glacier Exposure and Road Evacuation outputs
+risk_cols <- c("#FFEDA0", "#FD8D3C", "#B10026")   
+risk_pal  <- colorNumeric(risk_cols, domain = c(1, 3), na.color = "transparent")
+
+evac_cols <- c("#0072B2", "#F0E442", "#D55E00")   # Ideal, Highly suitable, Not ideal (Okabe-Ito)
+evac_pal  <- colorNumeric(evac_cols, domain = c(1, 3), na.color = "transparent")
+
+#Raster colours are loaded here, with the precomputed ranges from preprocessing loaded here
+slope_pal  <- colorNumeric(terrain.colors(100), slope_rng,  na.color = "transparent")
+
+#LISA colours are established, with respect to colour blind options, while attempting to maintain existing cartographic standards (Okabe-Ito colours were used)
+lisa_levels <- c("High-High", "Low-Low", "High-Low", "Low-High", "Not significant")
+lisa_cols   <- c("#D55E00", "#0072B2", "#F0E442", "#56B4E9", "#BDBDBD")           
+lisa_pal    <- colorFactor(lisa_cols, levels = lisa_levels)
+lisa_rpal   <- colorFactor(lisa_cols, domain = 1:5, na.color = "transparent")      
+
+#One image or map is printed, with one set of villages per region, to prevent multiple village imagery being sent through to be processed by the app
+village_raster <- function(v, values, max_cells = 2e6) {
+  vv <- terra::vect(sf::st_transform(v, 32643))
+  vv$val <- values
+  ev  <- as.vector(terra::ext(vv))
+  res <- max(200, ceiling(sqrt((ev[["xmax"]] - ev[["xmin"]]) * (ev[["ymax"]] - ev[["ymin"]]) / max_cells) / 50) * 50)
+  tpl <- terra::rast(terra::ext(vv), resolution = res, crs = "EPSG:32643")
+  terra::project(terra::rasterize(vv, tpl, field = "val"), "EPSG:3857", method = "near")
+}
+img_bytes <- 16 * 1024 * 1024   # allow a larger image before leaflet coarsens it
+
+#The raster here is reduced in size to the maximum size it can produce an output and maintain accuracy
+display_max_cells <- 4.5e6
+display_raster <- function(r, max_cells = display_max_cells) {
+  fact <- ceiling(sqrt(terra::ncell(r) / max_cells))
+  if (fact > 1) r <- terra::aggregate(r, fact = fact, fun = "modal", na.rm = TRUE)
+  terra::project(r, "EPSG:3857", method = "near")
+}
+
+#The pre-calculated grids are determined here
+pre_raster <- function(prefix, res) {
+  f <- find_data(paste0(prefix, "_", res, ".tif"))
+  if (is.null(f)) NULL else terra::rast(f)
+}
+
+#Here, for the Fast maps, the village lines are drawn using single lines as opposed to many, smaller connecting lines to ensure that
+#a broad summary of the villages can be viewed for the four regions without the computational load
+line_cache <- new.env()
+village_lines <- function(regs) {
+  do.call(rbind, lapply(regs, function(r) {
+    if (is.null(line_cache[[r]])) {
+      b <- sf::st_boundary(sf::st_geometry(Villages_disp[Villages_disp$region == r, ]))
+      parts <- unlist(lapply(b, function(x) {
+        if (inherits(x, "MULTILINESTRING")) unclass(x) else list(unclass(x))
+      }), recursive = FALSE)
+      line_cache[[r]] <- sf::st_sf(region = r,
+                                   geometry = sf::st_sfc(sf::st_multilinestring(parts), crs = 4326))
+    }
+    line_cache[[r]]
+  }))
+}
+
+
+#These are the base layers maintained in layer control. LISA, Glacier Exposure and Evacuation Suitability are added to the control once performed, and removed
+#when "Clear Results" are selected
+base_overlay_groups <- c("India Outline", "Himachal Pradesh", "Jammu and Kashmir",
+                         "Ladakh", "Uttarakhand", "Region Boundaries", "Glaciers of the Himalayas",
+                         "National Highways", "State Highways", "Rivers", "Slope")
+
+#These are considered "lazy" as these layers do not automatically appear when the dashboard loads. 
+lazy_groups <- c("Glaciers of the Himalayas", "National Highways", "State Highways",
+                 "Rivers", "Slope")
+
+#Here, the analysis layers are switched on
+analysis_groups <- c("LISA", "Glacier Exposure", "Evacuation Suitability")
+
+#A colour-blind friendly palette is chosen, with respect to the Okabe-Ito palette
+region_cols <- c("Himachal Pradesh"   = "#0072B2",   
+                 "Jammu and Kashmir"  = "#E69F00",   
+                 "Ladakh"             = "#009E73",   
+                 "Uttarakhand"        = "#CC79A7")   
+nh_col    <- "#F0E442"   
+sh_col    <- "#CCCCCC"   
+river_col <- "#56B4E9"   
+glacier_col <- "white"
+
+#The four main regions are zoomed into when the dashboard is loaded, while giving the user the option to zoom out to see the whole bounds of India
+study_bb <- as.numeric(st_bbox(Regions_1984))          
+india_bb <- as.numeric(st_bbox(Indiaview_full_1984))
+
+#4 Text is added to the respective tabs
+txt <- list(
+  
+  #Background Tab
+  #Text stored just below the Background Title 
+  bg_intro = "",
+  
+  bg_study_area = "",
+  
+  bg_glacier_background = "",
+  
+  bg_aim = "",
+  
+  bg_objectives = "",
+  
+  # Statistical Methods Tab
+  #Ordered according to the order on the Dashboard 
+  methods_choropleth = "",
+  
+  methods_lisa = "",
+  
+  methods_idw = "",
+  
+  methods_kde = "",
+  
+#Formulae for the equations
+  formula_choropleth = r"($$c_i=\sum_{g=1}^{G}\mathbf{1}\left[g\cap v_i\neq\varnothing\right]$$
+
+where \(c_i\) is the number of glaciers \(g\) that intersect village polygon \(v_i\) and \(G\) is the total number of glaciers. Villages are shaded from low to high \(c_i\) using a continuous colour scale.)",
+
+formula_lisa = r"($$I_i=\frac{z_i}{m_2}\sum_{j=1}^{n} w_{ij}\,z_j,\qquad z_i=x_i-\bar{x},\qquad m_2=\frac{1}{n}\sum_{i=1}^{n}z_i^{2}$$
+
+where \(x_i\) is the glacier count in village \(i\) and \(w_{ij}\) are the row-standardised spatial weights (Queen or Rook contiguity). A village is a High-High (or Low-Low) cluster when \(z_i\) and its spatial lag \(\sum_j w_{ij}z_j\) are both positive (or both negative) and \(p \lt 0.05\); High-Low and Low-High are the outliers.)",
+
+formula_idw = r"($$\hat{z}(s)=\frac{\sum_{i=1}^{n}w_i z_i}{\sum_{i=1}^{n}w_i},\qquad w_i=\frac{1}{d_i^{\,p}},\quad p=2$$
+
+Distance score used for rivers and roads:
+
+$$S(d)=\begin{cases}\dfrac{d^{-2}-D^{-2}}{d_0^{-2}-D^{-2}} & d \le D\\ 0 & d \gt D\end{cases}$$
+
+where \(d\) is the distance to the nearest river or road, \(D\) is the chosen distance and \(d_0\) is half the grid cell size.)",
+
+formula_kde = r"($$\hat{f}(s)=\sum_{i=1}^{n}\frac{3}{\pi h^{2}}\left(1-\frac{d_i^{2}}{h^{2}}\right)^{2},\qquad d_i \lt h$$
+
+where \(d_i\) is the distance from location \(s\) to glacier \(i\), \(h\) is the search radius (bandwidth) and \(n\) is the number of glaciers (quartic kernel).)",
+
+#Sources tab
+sources_data = r"()",
+
+sources_literature = r"()",
+
+sources_code = r"()",
+
+#Metadata Tab
+meta_crs = r"()",
+
+meta_preprocessing = r"()",
+
+meta_limitations = r"()",
+
+meta_recommendations = r"()",
+
+meta_contributors = r"()"
+)
+
+#Rotating Banner
+banner_facts <- c(
+  r"()",
+  r"()",
+  r"()",
+  r"()",
+  r"()"
+)
+
+fact_seconds <- 60   #Each fact lasts 60 seconds
+
+#Below is the base code for the banner, including rotations
+fact_banner <- function(facts, seconds) {
+  facts <- vapply(as.character(facts), fmt_text, character(1), USE.NAMES = FALSE)  
+  tagList(
+    div(class = "fact-banner",
+        div(class = "fact-label", "\U0001F3D4 Did you know?"),
+        div(id = "fact-text", HTML(facts[1])),
+        div(class = "fact-dots", id = "fact-dots")),
+    tags$script(HTML(sprintf("
+      $(function() {
+        var facts = %s, secs = %d, i = 0;
+        var el = $('#fact-text'), dots = $('#fact-dots');
+        if (!facts.length) return;
+        facts.forEach(function(f, k) {
+          dots.append('<span class=\"fact-dot' + (k === 0 ? ' active' : '') + '\"></span>');
+        });
+        el.html(facts[0]);
+        if (facts.length < 2) return;
+        setInterval(function() {
+          el.fadeOut(600, function() {
+            i = (i + 1) %% facts.length;
+            el.html(facts[i]).fadeIn(600);
+            dots.children().removeClass('active').eq(i).addClass('active');
+          });
+        }, secs * 1000);
+      });",
+      as.character(jsonlite::toJSON(unname(as.character(facts)))),
+      as.integer(seconds))))
+  )
+}
+
+#6 Text Formatting
+#For text formatting, et al. is made italics and the YouTube links are made clickable
+linkify <- function(x) {
+  pat <- "(?<![\"'>=])https?://[^\\s<>\"']+"
+  m   <- gregexpr(pat, x, perl = TRUE)
+  regmatches(x, m) <- lapply(regmatches(x, m), function(u) {
+    vapply(u, function(one) {
+      core  <- sub("[.,;:)]+$", "", one)                \
+      trail <- substr(one, nchar(core) + 1, nchar(one))
+      url   <- gsub("&", "&amp;", gsub("&amp;", "&", core, fixed = TRUE), fixed = TRUE)
+      paste0("<a href=\"", url, "\" target=\"_blank\" rel=\"noopener noreferrer\">", url, "</a>", trail)
+    }, character(1), USE.NAMES = FALSE)
+  })
+  x
+}
+
+#Kilometres squared is rewritten with the subscript
+sup_km2 <- function(x) gsub("km2(?![A-Za-z0-9])", "km<sup>2</sup>", x, perl = TRUE)
+
+fmt_text <- function(x) linkify(sup_km2(italic_etal(x)))
+
+#Keeps the block of text as paragraphs
+para <- function(x) {
+  if (is.null(x) || length(x) == 0 || is.na(x[1])) return(NULL)   # a missing entry shows nothing instead of crashing
+  parts <- trimws(strsplit(x, "\n\\s*\n")[[1]])
+  tagList(lapply(parts[nzchar(parts)], function(t) p(HTML(gsub("\n", "<br>", fmt_text(t))))))
+}
+
+#For the statistical methods tab, the dropdown arrows are kept permanently open
+static_panel <- function(title, ...) {
+  div(class = "panel panel-default",
+      div(class = "panel-heading", h4(class = "panel-title", title)),
+      div(class = "panel-body", ...))
+}
+
+#The description of the methods are written on the left while the formulae are displayed on the right
+method_row <- function(title, text, formula) {
+  fluidRow(class = "method-row",
+           column(width = 6, static_panel(title, para(text))),
+           column(width = 6, class = "split-right",
+                  static_panel(paste0(title, ": formulae"), para(formula))))
+}
+
+#Youtube video formatting: this is kept landscape and on the right hand side 
+yt_block <- function(heading, video_id, watch_url, title) {
+  div(class = "yt-block",
+      h4(heading),
+      div(class = "yt-size",
+          div(class = "yt-wrap",
+              tags$iframe(
+                src = paste0("https://www.youtube.com/embed/", video_id, "?rel=0"),
+                title = title,
+                allow = "accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
+                allowfullscreen = NA
+              ))),
+      p(tags$a(href = watch_url, target = "_blank", rel = "noopener noreferrer",
+               "Watch this video on YouTube")))
+}
+
+#7 UI Development
+ui <- fluidPage(
+  title = "Glacier Collapse in India",
+  div(class = "app-title", h2("Glacier Collapse in India")),
+  tags$head(
+    #Keeps the page running, even if one is busy across tabs
+    tags$style(HTML("
+      h2 { color:#1035AC; }
+      .panel-title { color:#000080; }
+      .panel { background-color:#0080FF; color:white; }
+      /* Background tab: title, intro text and the four tabs stacked in the left column */
+      .bg-title { margin-top:10px; margin-bottom:12px; }
+      .bg-intro { min-height:30px; margin-bottom:15px; }
+      .bg-intro p { margin:0 0 8px 0; }
+      /* Right-hand panel: banner on top, videos below - one continuous blue column with a divider line */
+      .bg-videos { border-left:2px solid #1035AC; padding-left:20px !important; padding-top:0;
+                   padding-bottom:12px; background-color:#79B7E6; }
+      .bg-videos a { color:#FFFFFF; text-decoration:underline; }
+      /* Rotating fun-fact banner: same font as the Background heading, white text on the app blue,
+         with its content centred both ways. Edit font-size in .fact-label and #fact-text to resize. */
+      .fact-banner { display:flex; flex-direction:column; justify-content:center; align-items:center;
+                     min-height:150px; margin-bottom:12px; background:#1035AC; color:#FFFFFF;
+                     border-radius:8px; padding:12px 16px; text-align:center;
+                     font-family:inherit; font-weight:500; }
+      .fact-label { font-size:30px; line-height:1.1; font-weight:500; margin:0 0 12px 0; color:#FFFFFF; 
+      .fact-dots { margin-top:10px; }
+      .fact-dot { display:inline-block; width:8px; height:8px; margin:0 3px; border-radius:50%;
+                  background:rgba(255,255,255,0.4); }
+      .fact-dot.active { background:#FFFFFF; }
+      /* Statistical Methods: methods on the left, formulae on the right, one row per method */
+      .methods-head h3, .src-title { color:#1035AC; margin-top:10px; }
+      .method-row { display:flex; flex-wrap:wrap; align-items:stretch; }
+      .method-row:before, .method-row:after { display:none; }
+      .method-row > div { display:flex; flex-direction:column; }
+      .method-row .panel { flex:1; }
+      .split-right { border-left:2px solid #1035AC; padding-left:20px !important; }
+      /* Sources: data, code and literature sources side by side */
+      .sources-row { display:flex; flex-wrap:wrap; align-items:stretch; }
+      .sources-row:before, .sources-row:after { display:none; }
+      /* Long links wrap inside their own column instead of running into the next one */
+      .sources-row > div { min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+      .sources-row a { color:#0056B3; text-decoration:underline; overflow-wrap:anywhere; word-break:break-all; }
+      .sources-row a:hover { color:#1035AC; }
+      /* Main app heading band */
+      .app-title { background-color:#87CDEE; text-align:center; padding:14px 15px;
+                   margin:0 -15px 15px -15px; }
+      .app-title h2 { margin:0; }
+      /* Background tab: left column and right panel sit side by side, each starting at the top */
+      .bg-row { display:flex; flex-wrap:wrap; align-items:flex-start; }
+      .bg-row:before, .bg-row:after { display:none; }
+      /* Two 16:9 videos that fill the right-hand column, stopping 20px short of the divider.
+         If they are too tall for your screen, change width:100% to e.g. width:min(100%, 560px). */
+      .yt-block { text-align:center; margin-bottom:10px; }
+      .yt-block h4 { color:#FFFFFF; margin-top:0; margin-bottom:8px; font-size:15px; line-height:1.3;
+                     text-shadow:0 1px 3px rgba(0,0,0,0.45); }
+      .yt-block p { margin:4px 0 0 0; font-size:13px; text-shadow:0 1px 3px rgba(0,0,0,0.45); }
+      .yt-size { width:100%; margin:0 auto; }
+      .yt-wrap { position:relative; width:100%; height:0; padding-bottom:56.25%; }
+      .yt-wrap iframe { position:absolute; top:0; left:0; width:100%; height:100%;
+                        border:0; border-radius:8px; }
+    "))
+  ),
+  
+  #The map appears every single time, but is hidden until the user accesses the tab
+  tags$script(HTML("$(document).on('shown.bs.tab', function() {
+                      setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 50);
+                    });")),
+  
+  #Should the server be left idle, a Disconnected from Server message will appear for every 20s it is idle
+  tags$script(HTML("setInterval(function() {
+                      if (window.Shiny && Shiny.setInputValue) {
+                        Shiny.setInputValue('keepalive', Date.now(), {priority: 'event'});
+                      }
+                    }, 20000);
+                    $(document).on('shiny:disconnected', function() {
+                      try {
+                        var last = parseInt(sessionStorage.getItem('lastReload') || '0');
+                        if (Date.now() - last > 30000) {
+                          sessionStorage.setItem('lastReload', String(Date.now()));
+                          setTimeout(function() { location.reload(); }, 1500);
+                        }
+                      } catch (e) {}
+                    });")),
+  #Tab for Background
+  tabsetPanel(
+    id = "main_tabs",
+    tabPanel("Background",
+             fluidRow(class = "bg-row",
+                      #On the left hand side, the title and drop-down arrows are present
+                      column(width = 6, class = "bg-left",
+                             h2("Background", class = "bg-title"),
+                             # Text block under the title - edit txt$bg_intro near the top of this file
+                             div(class = "bg-intro", para(txt$bg_intro)),
+                             bsCollapse(id = "bg_collapse", open = NULL,
+                                        bsCollapsePanel("Study Area", para(txt$bg_study_area)),
+                                        bsCollapsePanel("Glacier Background and Historical Cases", para(txt$bg_glacier_background)),
+                                        bsCollapsePanel("Aim", para(txt$bg_aim)),
+                                        bsCollapsePanel("Objectives", para(txt$bg_objectives))
+                             )
+                      ),
+                      #On the right-hand side, there is the fun-fact bannner and the YouTube videos
+                      column(width = 6, class = "bg-videos",
+                             fact_banner(banner_facts, fact_seconds),
+                             yt_block(
+                               heading   = "Want to check out what glacial collapse looks like? Check out this video below on what happened in Nepal this year \U0001F447",
+                               video_id  = "JXYbw_wdjRM",
+                               watch_url = "https://www.youtube.com/watch?v=JXYbw_wdjRM",
+                               title     = "Glacial collapse in Nepal"
+                             ),
+                             yt_block(
+                               heading   = "Want to see how it all started? Watch the video below\U0001F447",
+                               video_id  = "qEic2ZU6taM",
+                               watch_url = "https://www.youtube.com/watch?v=qEic2ZU6taM",
+                               title     = "How the Nepal glacier collapse started"
+                             )
+                      )
+             )
+    ),
+    
+    #Statistical Methods tab
+    tabPanel("Statistical Methods",
+             h2("Statistical Methods"),
+             withMathJax(
+               fluidRow(class = "method-row methods-head",
+                        column(width = 6, h3("Methods")),
+                        column(width = 6, class = "split-right", h3("Formulae"))),
+               method_row("Choropleth Map", txt$methods_choropleth, txt$formula_choropleth),
+               method_row("Local Indicators of Spatial Association (LISA)", txt$methods_lisa, txt$formula_lisa),
+               method_row("Inverse Distance Weighting (IDW)", txt$methods_idw, txt$formula_idw),
+               method_row("Kernel Density Estimation (KDE)", txt$methods_kde, txt$formula_kde),
+               # Re-typeset the formulae whenever a tab is shown (they start in a hidden tab)
+               tags$script(HTML("$(document).on('shown.bs.tab', function() {
+                                   if (window.MathJax) { MathJax.Hub.Queue(['Typeset', MathJax.Hub]); }
+                                 });"))
+             )
+    ),
+    
+    tabPanel("Dashboard",
+             fluidRow(
+               column(width = 8, leafletOutput("map", width = "100%", height = "600px")),
+               column(width = 4,
+                      tabsetPanel(
+                        tabPanel("Choropleth Map and LISA Analysis",
+                                 checkboxGroupInput("regions_selected", "Select Regions:",
+                                                    choices = c("Himachal Pradesh", "Jammu and Kashmir",
+                                                                "Ladakh", "Uttarakhand"),
+                                                    selected = "Himachal Pradesh"),
+                                 radioButtons("choro_draw", "Map style:", inline = TRUE,
+                                              choices = c("Fast (image)" = "raster",
+                                                          "Detailed (polygons, slower)" = "poly"),
+                                              selected = "raster"),
+                                 actionButton("make_choropleth", "Generate Glacier Choropleth"),
+                                 actionButton("clear_choropleth", "Clear Results"),
+                                 leafletOutput("glacier_choropleth", height = "400px"),
+                                 # Neighbourhood dropdown, Run LISA, Download and Clear LISA buttons
+                                 # are rendered by the server only once the choropleth exists
+                                 uiOutput("lisa_controls_ui")
+                        ),
+                        tabPanel("Glacier Exposure",
+                                 sliderInput("river_distance", "Distance to rivers (IDW\u00b2 influence):",
+                                             min = 500, max = 1000, value = 500, step = 50, post = " m"),
+                                 selectInput("glacier_radius", "Glacier KDE search radius:",
+                                             choices = c("1000 m" = 1000, "2000 m" = 2000)),
+                                 sliderInput("slope_range", "Steep-slope ramp (degrees):",
+                                             min = 0, max = 60, value = c(10, 35)),
+                                 selectInput("risk_res", "Grid cell size:",
+                                             choices = c("500 m" = 500, "250 m" = 250), selected = 500),
+                                 helpText("Slope scores 0 at or below the left handle and 1 at or above the right handle.",
+                                          "Risk = mean of river (IDW\u00b2), glacier (KDE) and slope scores:",
+                                          "Low \u2264 0.33 < Moderate \u2264 0.67 < High.",
+                                          "The 250 m grid gives more detail than 500 m but is slower."),
+                                 actionButton("run_risk", "Run Exposure"),
+                                 actionButton("clear_risk", "Clear Results")
+                        ),
+                        tabPanel("Evacuation",
+                                 sliderInput("road_distance", "Maximum evacuation distance to roads (IDW\u00b2):",
+                                             min = 500, max = 1000, value = 1000, step = 50, post = " m"),
+                                 selectInput("evac_res", "Grid cell size:",
+                                             choices = c("500 m" = 500, "250 m" = 250), selected=500),
+                                 helpText("Road access is scored with IDW\u00b2 and ranked:",
+                                          "Ideal (up to half the distance), Highly suitable (half to the full distance),",
+                                          "Not ideal (beyond the distance) \u2013 requires intervention."),
+                                 actionButton("run_evacuation", "Run Evacuation"),
+                                 actionButton("clear_evac", "Clear Results")
+                        )
+                      )
+               )
+             )
+    ),
+
+#Sources tab
+    tabPanel("Sources",
+             h2("Sources"),
+             fluidRow(class = "sources-row",
+                      column(width = 4,
+                             h3("Data Sources", class = "src-title"),
+                             para(txt$sources_data)),
+                      column(width = 4, class = "split-right",
+                             h3("Code Sources", class = "src-title"),
+                             para(txt$sources_code)),
+                      column(width = 4, class = "split-right",
+                             h3("Literature Sources", class = "src-title"),
+                             para(txt$sources_literature)))
+    ),
+
+#Metadata tab
+    tabPanel("Metadata",
+             h2("Metadata"),
+             bsCollapse(id = "meta_collapse", open = NULL,
+                        bsCollapsePanel("Coordinate Reference System", para(txt$meta_crs)),
+                        bsCollapsePanel("Data Preprocessing", para(txt$meta_preprocessing)),
+                        bsCollapsePanel("Limitations", para(txt$meta_limitations)),
+                        bsCollapsePanel("Recommendations", para(txt$meta_recommendations)),
+                        bsCollapsePanel("Contributors", para(txt$meta_contributors))
+             )
+    )
+  )
+)
+
+#8 Server
+server <- function(input, output, session) {
+  
+  
+  lisa_results   <- reactiveVal(NULL)
+  choro_data     <- reactiveVal(NULL)
+  
+  
+ #Layer control panels, as per the constraints implemented earlier
+  active_overlays <- reactiveVal(character())
+  
+  refresh_layers_control <- function() {
+    leafletProxy("map") %>%
+      removeLayersControl() %>%
+      addLayersControl(
+        baseGroups = "Esri.WorldImagery",
+        overlayGroups = c(base_overlay_groups, active_overlays()),
+        options = layersControlOptions(collapsed = FALSE)
+      )
+  }
+  show_in_layers <- function(group, bounds = FALSE) {
+ #Only the analysis layer is kept, and the region boundaries
+    keep <- c(group, if (bounds) "Region Boundaries")
+    p <- leafletProxy("map") %>%
+      hideGroup(setdiff(c(base_overlay_groups, analysis_groups), keep))
+    if (bounds) p %>% showGroup("Region Boundaries")
+    active_overlays(union(active_overlays(), group))
+    refresh_layers_control()
+  }
+  hide_from_layers <- function(group) {
+    active_overlays(setdiff(active_overlays(), group))
+    refresh_layers_control()
+  }
+  
+#Base Map (what is seen when you first view the dashboard)
+  output$map <- renderLeaflet({
+    leaflet(options = leafletOptions(preferCanvas = TRUE)) %>%   # canvas draws many shapes much faster
+      addProviderTiles("Esri.WorldImagery") %>%
+      addPolylines(data = Indiaview_full_1984, color = "black", weight = 2, group = "India Outline") %>%
+      addPolygons(data = HPview_1984, fillColor = region_cols[["Himachal Pradesh"]],  fillOpacity = 0.5,
+                  color = "black", weight = 1, group = "Himachal Pradesh") %>%
+      addPolygons(data = JKview_1984, fillColor = region_cols[["Jammu and Kashmir"]], fillOpacity = 0.5,
+                  color = "black", weight = 1, group = "Jammu and Kashmir") %>%
+      addPolygons(data = Lview_1984,  fillColor = region_cols[["Ladakh"]],            fillOpacity = 0.5,
+                  color = "black", weight = 1, group = "Ladakh") %>%
+      addPolygons(data = Uview_1984,  fillColor = region_cols[["Uttarakhand"]],       fillOpacity = 0.5,
+                  color = "black", weight = 1, group = "Uttarakhand") %>%
+      addMapPane("boundaries", zIndex = 450) %>% #Boundary lines retained with no fill
+      addPolygons(data = Regions_1984, fill = FALSE, color = "black", weight = 5, opacity = 1,
+                  group = "Region Boundaries",
+                  options = pathOptions(pane = "boundaries", interactive = FALSE)) %>%
+      addPolygons(data = Regions_1984, fill = FALSE, color = unname(region_cols[Regions_1984$region]),
+                  weight = 2.5, opacity = 1, group = "Region Boundaries",
+                  options = pathOptions(pane = "boundaries", interactive = FALSE)) %>%
+      #Lazy Layers
+      addLegend(position = "bottomleft",
+                colors = c(unname(region_cols), nh_col, sh_col, river_col, glacier_col),
+                labels = c(names(region_cols), "National Highway", "State Highway (dashed)", "Rivers", "Glaciers"),
+                title = "Map Layers") %>%
+      addLayersControl(
+        baseGroups = "Esri.WorldImagery",
+        overlayGroups = base_overlay_groups,
+        options = layersControlOptions(collapsed = FALSE)
+      ) %>%
+   #Maintains being filled in on the four regions
+      fitBounds(lng1 = study_bb[1], lat1 = study_bb[2], lng2 = study_bb[3], lat2 = study_bb[4]) %>%
+   #Inputs zoom in and zoom out buttons, if users do not have a scrollable mouse
+      addEasyButton(easyButton(
+        icon = "fa-crosshairs", title = "Zoom to the four study regions",
+        onClick = JS(sprintf("function(btn, map){ map.fitBounds([[%f, %f], [%f, %f]]); }",
+                             study_bb[2], study_bb[1], study_bb[4], study_bb[3])))) %>%
+      addEasyButton(easyButton(
+        icon = "fa-globe", title = "Zoom out to all of India",
+        onClick = JS(sprintf("function(btn, map){ map.fitBounds([[%f, %f], [%f, %f]]); }",
+                             india_bb[2], india_bb[1], india_bb[4], india_bb[3])))) %>%
+      # Only the outline, filled regions and glaciers start switched on
+      hideGroup(c("Region Boundaries", "National Highways", "State Highways", "Rivers", "Slope"))
+  })
+#The map is hidden, and is only built when the Dashboard tab is first opened
+  state <- new.env()
+  state$fitted <- FALSE
+  observeEvent(input$main_tabs, {
+    if (identical(input$main_tabs, "Dashboard") && !state$fitted) {
+      state$fitted <- TRUE
+      leafletProxy("map") %>%
+        fitBounds(lng1 = study_bb[1], lat1 = study_bb[2], lng2 = study_bb[3], lat2 = study_bb[4])
+    }
+  })
+
+#Here is the development of the lazy layers
+  loaded <- new.env()
+  load_group <- function(grp) {
+    if (isTRUE(loaded[[grp]])) return(invisible())
+    loaded[[grp]] <- TRUE
+    withProgress(message = paste("Loading", grp, "..."), value = 0.5, {
+      p <- leafletProxy("map")
+      if (grp == "Glaciers of the Himalayas") {
+        p %>% addCircleMarkers(data = Glacierview_1984, radius = 0.5, fillColor = "white", color = "black",
+                               weight = 1, fillOpacity = 1, opacity = 1, group = grp)
+      } else if (grp == "National Highways") {
+        p %>% addPolylines(data = Roadsview_1984 %>% dplyr::filter(rdtype == "National Highway"),
+                           color = nh_col, weight = 2, group = grp)
+      } else if (grp == "State Highways") {
+        p %>% addPolylines(data = Roadsview_1984 %>% dplyr::filter(rdtype == "State Highway"),
+                           color = sh_col, weight = 1.2, dashArray = "5,4", group = grp)
+      } else if (grp == "Rivers") {
+        p %>% addPolylines(data = Riverview_1984, color = river_col, weight = 1.2, group = grp)
+      } else if (grp == "Slope") {
+        p %>% addRasterImage(India_slope_50, colors = slope_pal, opacity = 0.7, group = grp)
+      }
+    })
+  }
+  #Glaciers are only added once the map first appears. The other layers are kept unchecked. 
+  observeEvent(input$map_groups, {
+    for (g in intersect(unlist(input$map_groups), lazy_groups)) load_group(g)
+  })
+  
+  #Glacier Choropleth Code
+  observeEvent(input$make_choropleth, {
+    if (length(input$regions_selected) < 1) {
+      showNotification("Select at least one region.", type = "error"); return()
+    }
+    
+    v <- Villages_disp[Villages_disp$region %in% input$regions_selected, ]   # lightweight, for drawing
+    if (nrow(v) == 0) {
+      showNotification("No villages found for selected regions.", type = "error"); return()
+    }
+    
+    choro_data(v)
+    message("[choropleth] ", nrow(v), " villages selected | memory in use: ", round(sum(gc()[, 2])), " MB")
+    showNotification("Glacier Choropleth complete!", type = "message", duration = 5)
+  })
+  
+  #Show the LISA analysis button and dropdowns once the Choropleth has been performed
+  output$lisa_controls_ui <- renderUI({
+    req(choro_data())
+    tagList(
+      selectInput("contiguity_selected", "Neighbour definition:",
+                  choices = c("Queen", "Rook")),
+      actionButton("run_lisa", "Run LISA Analysis"),
+      downloadButton("download_lisa", "Download LISA Results"),
+      actionButton("clear_lisa", "Clear Results")
+    )
+  })
+  
+  output$glacier_choropleth <- renderLeaflet({
+    v <- choro_data()
+    req(v)
+    t0 <- Sys.time()
+    on.exit(message("[choropleth] R built the map in ", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 1), " s"), add = TRUE)
+    if (identical(input$choro_draw, "poly")) {
+      pal <- colorNumeric("plasma", v$glacier_count)
+      leaflet(v, options = leafletOptions(preferCanvas = TRUE)) %>%   # canvas = much faster than SVG
+        addProviderTiles("Esri.WorldImagery") %>%
+        addPolygons(
+          fillColor = ~pal(glacier_count), fillOpacity = 1,
+          color = ~pal(glacier_count), weight = 1, opacity = 1, smoothFactor = 1,
+          label = ~paste0(glacier_count, " glaciers")
+        ) %>%
+        addPolylines(data = village_lines(unique(v$region)), color = "#222222", weight = 0.5,
+                     opacity = 0.6, smoothFactor = 1) %>%
+        addLegend("bottomright", pal = pal, values = ~glacier_count, title = "Glacier Count")
+    } else {
+      rpal <- colorNumeric("plasma", range(v$glacier_count), na.color = "transparent")
+      leaflet(options = leafletOptions(preferCanvas = TRUE)) %>%
+        addProviderTiles("Esri.WorldImagery") %>%
+        addRasterImage(village_raster(v, v$glacier_count), colors = rpal, opacity = 0.85,
+                       method = "ngb", maxBytes = img_bytes, project = FALSE) %>%
+        addPolylines(data = village_lines(unique(v$region)), color = "#222222", weight = 0.5,
+                     opacity = 0.6, smoothFactor = 1.5) %>%
+        addLegend("bottomright", pal = rpal, values = v$glacier_count, title = "Glacier Count")
+    }
+  })
+  
+  #LISA Analysis
+  observeEvent(input$run_lisa, {
+    if (is.null(choro_data()) || is.null(input$contiguity_selected)) {
+      showNotification("Generate the glacier choropleth first, then choose a neighbour definition.",
+                       type = "warning"); return()
+    }
+    if (length(input$regions_selected) < 1) {
+      showNotification("Select at least one region.", type = "error"); return()
+    }
+    
+    sel_lgl <- Villages_attr$region %in% input$regions_selected
+    sel <- Villages_attr[sel_lgl, , drop = FALSE]
+    if (nrow(sel) < 6) {
+      showNotification("Too few villages for LISA.", type = "error"); return()
+    }
+    
+    withProgress(message = "Running LISA analysis...", value = 0, {
+      incProgress(0.3, detail = "Building spatial weights...")
+      nb <- tryCatch(
+        subset(if (identical(input$contiguity_selected, "Queen")) nb_queen else nb_rook, sel_lgl), #The precalculated neighbourhoods are used here
+        error = function(e) {
+          showNotification(paste("Error building spatial weights:", conditionMessage(e)), type = "error")
+          NULL
+        })
+      if (is.null(nb)) return()
+      
+      incProgress(0.5, detail = "Computing weights...")
+      lw <- nb2listw(nb, style = "W", zero.policy = TRUE) #zero.policy prevents failure of dashboard, even if there are no neighbours
+      
+      incProgress(0.7, detail = "Running local Moran's I...")
+      x <- as.numeric(sel$glacier_count)
+      lisa <- tryCatch(localmoran(x, lw, zero.policy = TRUE), error = function(e) {
+        showNotification(paste("Error running LISA:", conditionMessage(e)), type = "error")
+        NULL
+      })
+      if (is.null(lisa)) return()
+      
+      incProgress(0.9, detail = "Classifying clusters...")
+      z    <- x - mean(x, na.rm = TRUE)
+      lagz <- lag.listw(lw, z, zero.policy = TRUE)
+      pval <- lisa[, 5] #p-value identified from column 5
+      sig  <- !is.na(pval) & pval < 0.05
+      sel$pval <- pval
+      sel$lisa_cluster <- factor(
+        ifelse(!sig, "Not significant",
+               ifelse(z > 0 & lagz > 0, "High-High",
+                      ifelse(z < 0 & lagz < 0, "Low-Low",
+                             ifelse(z > 0 & lagz < 0, "High-Low", "Low-High")))),
+        levels = lisa_levels)
+      lisa_results(sel)
+      #Draws the polygons, but as a lightweight with a transparent fill
+      sel_disp <- Villages_disp[Villages_disp$vid %in% sel$vid, ]
+      sel_disp$lisa_cluster <- sel$lisa_cluster[match(sel_disp$vid, sel$vid)]
+      
+      px <- leafletProxy("map") %>% clearGroup("LISA") %>% removeControl("lisa_legend")
+      if (identical(input$choro_draw, "poly")) {
+        px %>%
+          addPolygons(data = sel_disp,
+                      fillColor = ~lisa_pal(lisa_cluster), fillOpacity = 0.7,
+                      color = "black", weight = 1, smoothFactor = 1.5, group = "LISA",
+                      label = ~paste0(lisa_cluster, ": ", glacier_count, " glaciers")) %>%
+          addLegend("topright", pal = lisa_pal, values = lisa_levels,
+                    title = "LISA clusters", layerId = "lisa_legend")
+      } else {
+        px %>%
+          addRasterImage(village_raster(sel_disp, as.integer(sel_disp$lisa_cluster)), colors = lisa_rpal,
+                         opacity = 0.7, method = "ngb", group = "LISA", maxBytes = img_bytes, project = FALSE) %>%
+          addPolylines(data = village_lines(unique(sel_disp$region)), color = "#222222", weight = 0.5,
+                       opacity = 0.6, smoothFactor = 1.5, group = "LISA") %>%
+          addLegend("topright", colors = lisa_cols, labels = lisa_levels,
+                    title = "LISA clusters", layerId = "lisa_legend")
+      }
+      
+      show_in_layers("LISA")
+    })
+    
+    showNotification("LISA analysis complete!", type = "message", duration = 5)
+  })
+  
+  output$download_lisa <- downloadHandler(
+    filename = function() "lisa_results.zip",
+    content = function(file) {
+      res <- lisa_results()
+      req(res)
+      #Full-detailed regions, with villages, are read once by the disk
+      geo <- do.call(rbind, lapply(unique(res$region), function(r) {
+        f <- find_data(paste0("villages_", region_slug[[r]], ".rds"))
+        if (is.null(f)) stop("Missing data file for ", r, ". Re-run preprocess.R and redeploy.")
+        readRDS(f)
+      }))
+      m   <- match(res$vid, geo$vid)
+      out <- sf::st_sf(region = res$region, vid = res$vid, glaciers = res$glacier_count,
+                       pval = res$pval, cluster = as.character(res$lisa_cluster),
+                       geometry = sf::st_geometry(geo)[m])
+      rm(geo); invisible(gc())
+      tmp <- file.path(tempdir(), "lisa_export")
+      unlink(tmp, recursive = TRUE); dir.create(tmp)
+      st_write(out, file.path(tmp, "lisa_results.shp"), quiet = TRUE)
+      zip::zipr(file, files = list.files(tmp, full.names = TRUE))
+    }
+  )
+  
+  # Grid helpers are utilised here to extract the grids, and fall back on recalculation if it is not found (but this is an absolute backup)
+  risk_cache  <- new.env()
+  risk_result <- reactiveVal(NULL)
+  
+  get_template <- function(res) {
+    k <- paste0("tpl_", res)
+    if (is.null(risk_cache[[k]])) {
+      tpl <- make_template(res)
+      if (terra::ncell(tpl) > 6e7) {
+        stop("A ", res, " m grid would have ", format(terra::ncell(tpl), big.mark = ","),
+             " cells - too large. Choose a coarser grid cell size.")
+      }
+      risk_cache[[k]] <- tpl
+    }
+    risk_cache[[k]]
+  }
+  
+  #Takes the distance from every cell to the line feature
+  line_distance <- function(sf_lines, tpl) {
+    rv <- terra::vect(st_transform(sf_lines, 32643))
+    r  <- terra::rasterize(rv, tpl, field = 1, touches = TRUE)
+    terra::distance(r)
+  }
+  
+  get_river_dist <- function(res) {
+    k <- paste0("river_", res)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- pre_raster("river_dist", res)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- line_distance(Rivers_clean, get_template(res))
+    risk_cache[[k]]
+  }
+  
+  get_road_dist <- function(res) {
+    k <- paste0("road_", res)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- pre_raster("road_dist", res)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- line_distance(Roads_clean, get_template(res))
+    risk_cache[[k]]
+  }
+  
+  get_slope_grid <- function(res) {
+    k <- paste0("slope_", res)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- pre_raster("slope_grid", res)
+    if (is.null(risk_cache[[k]])) {
+      tpl <- get_template(res)
+      s <- tryCatch(terra::project(India_slope1, tpl, method = "max"),   # keep steepest value
+                    error = function(e) terra::project(India_slope1, tpl, method = "bilinear"))
+      risk_cache[[k]] <- terra::subst(s, NA, 0)
+    }
+    risk_cache[[k]]
+  }
+  
+  #Scores the highest slope according to a 3 x 3 neighbourhood
+  get_slope_max <- function(res) {
+    k <- paste0("slopemax_", res)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- pre_raster("slope_max", res)
+    if (is.null(risk_cache[[k]])) {
+      risk_cache[[k]] <- terra::subst(terra::focal(get_slope_grid(res), w = 3, fun = "max", na.rm = TRUE), NA, 0)
+    }
+    risk_cache[[k]]
+  }
+  
+  get_glacier_counts <- function(res) {
+    k <- paste0("glaciers_", res)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- pre_raster("glacier_counts", res)
+    if (is.null(risk_cache[[k]])) {
+      gl <- st_transform(glacierview_clean, 32643)
+      if (!all(st_geometry_type(gl) %in% c("POINT", "MULTIPOINT"))) {
+        gl <- suppressWarnings(st_point_on_surface(gl))
+      }
+      risk_cache[[k]] <- terra::rasterize(terra::vect(gl), get_template(res), field = 1,
+                                          fun = "sum", background = 0)
+    }
+    risk_cache[[k]]
+  }
+  
+  #Glacier density is scaled here from 0 to 1
+  get_kde_score <- function(res, H) {
+    k <- paste0("kde_", res, "_", H)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- pre_raster("kde", paste0(res, "_", H))
+    if (is.null(risk_cache[[k]])) {
+      kde  <- kde_quartic(get_glacier_counts(res), H, res)
+      kmax <- terra::global(kde, "max", na.rm = TRUE)[[1]]
+      sc   <- if (is.finite(kmax) && kmax > 0) kde / kmax else kde * 0
+      risk_cache[[k]] <- terra::clamp(terra::subst(sc, NA, 0), lower = 0, upper = 1, values = TRUE)
+    }
+    risk_cache[[k]]
+  }
+  
+  #The four regions as a study area are masked 
+  get_study_mask <- function(res) {
+    k <- paste0("mask_", res)
+    if (is.null(risk_cache[[k]])) risk_cache[[k]] <- pre_raster("study_mask", res)
+    if (is.null(risk_cache[[k]])) {
+      v <- terra::vect(st_geometry(st_transform(Regions_1984, 32643)))
+      risk_cache[[k]] <- terra::rasterize(v, get_template(res), field = 1)
+    }
+    risk_cache[[k]]
+  }
+  
+  area_km2 <- function(freq_df, v, res) {
+    n <- freq_df$count[freq_df$value == v]
+    if (length(n) == 0) 0 else round(n * res^2 / 1e6)
+  }
+  
+#Glacier Exposure
+  # Three 0-1 scores on a common UTM 43N grid, averaged into one risk surface:
+  #  1. River proximity : In terms of IDW^2 where regions close to the river are 1 and regions further awahy are 0. 
+  #  2. Glacier density : Quartic KDE, where regions falling inside the bandwith are 1 and outside are 0.
+  #  3. Slope steepness : Similar approach to the above two, where the user input determines which slope is considered.
+  #The following exposure classes are determined: Low (0-0.33], Moderate (0.33-0.67], High (0.67-1].
+  #It is important to note that an exposure value of 0 is not plotted. 
+  #The grids used here have already been pre-calculated
+  observeEvent(input$run_risk, {
+    D   <- as.numeric(input$river_distance)
+    H   <- as.numeric(input$glacier_radius)
+    lo  <- input$slope_range[1]
+    hi  <- input$slope_range[2]
+    res <- pick_res(D, input$risk_res)
+    d0  <- res / 2
+    
+    if (hi <= lo) {
+      showNotification("Slope ramp: the maximum must be greater than the minimum.", type = "error")
+      return()
+    }
+    if (D <= d0) {
+      showNotification(paste0("A ", res, " m grid is too coarse for a ", D,
+                              " m river distance. Choose a finer grid cell size."), type = "error")
+      return()
+    }
+    if (res > D / 2) {
+      showNotification(paste0("Note: ", res, " m cells are coarse for a ", D,
+                              " m distance; results will look blocky."), type = "warning")
+    }
+    
+    out <- tryCatch({
+      withProgress(message = "Running glacier exposure analysis...", value = 0, {
+        incProgress(0.2, detail = "Reading the pre-calculated grids...")
+        rd   <- get_river_dist(res)       # metres to the nearest river
+        kde  <- get_kde_score(res, H)     # glacier density score, 0-1
+        smax <- get_slope_max(res)        # steepest slope in each 3 x 3 neighbourhood
+        
+        incProgress(0.4, detail = "Scoring (IDW squared, KDE, slope) and classifying...")
+        cls <- terra::lapp(c(rd, kde, smax), fun = function(rd, kde, smax) {
+          d_eff <- pmax(rd, d0)
+          river <- ifelse(rd <= D, (1 / d_eff^2 - 1 / D^2) / (1 / d0^2 - 1 / D^2), 0)
+          slope <- pmin(pmax((smax - lo) / (hi - lo), 0), 1)
+          r     <- (river + kde + slope) / 3
+          ifelse(r > 2/3, 3, ifelse(r > 1/3, 2, ifelse(r > 0, 1, NA)))   # 1 Low, 2 Moderate, 3 High
+        }, wopt = list(datatype = "INT1U"))
+        
+        incProgress(0.3, detail = "Preparing map...")
+        list(ll = display_raster(cls), freq = terra::freq(cls))
+      })
+    }, error = function(e) {
+      showNotification(paste("Glacier exposure error:", conditionMessage(e)), type = "error", duration = 15)
+      NULL
+    })
+    if (is.null(out)) return()
+    
+    risk_result(out$ll)
+    
+    leafletProxy("map") %>%
+      clearGroup("Glacier Exposure") %>%
+      removeControl("risk_legend") %>%
+      addRasterImage(out$ll, colors = risk_pal, method = "ngb", opacity = 0.75, group = "Glacier Exposure",
+                     maxBytes = img_bytes, project = FALSE) %>%
+      addLegend("bottomright", colors = risk_cols, labels = c("Low", "Moderate", "High"),
+                title = "Glacier exposure", layerId = "risk_legend", opacity = 0.9)
+    show_in_layers("Glacier Exposure", bounds = TRUE)
+    
+    showNotification(
+      paste0("Glacier exposure complete (River IDW\u00b2 ", D, " m | Glacier KDE ", H, " m | Slope ",
+             lo, "-", hi, "\u00b0 | ", res, " m cells). Area: Low ", area_km2(out$freq, 1, res),
+             " km\u00b2, Moderate ", area_km2(out$freq, 2, res),
+             " km\u00b2, High ", area_km2(out$freq, 3, res), " km\u00b2."),
+      type = "message", duration = 10)
+    rm(out); invisible(gc())
+  })
+  
+  #Evacuation
+  #Road access is determined as based on the IDW^2 where next to the road is 1 and further away is 0, with respect to the distance identified.
+  #The output refers to the extent of suitability and what intervention strategy should be implemented.
+  #The ranked outputs are read in a single-pass, to reduce memory.
+  observeEvent(input$run_evacuation, {
+    D   <- as.numeric(input$road_distance)
+    res <- pick_res(D, input$evac_res)
+    d0  <- res / 2
+    
+    if (D <= d0) {
+      showNotification(paste0("A ", res, " m grid is too coarse for a ", D,
+                              " m road distance. Choose a finer grid cell size."), type = "error")
+      return()
+    }
+    if (res > D / 2) {
+      showNotification(paste0("Note: ", res, " m cells are coarse for a ", D,
+                              " m distance; results will look blocky."), type = "warning")
+    }
+    
+    out <- tryCatch({
+      withProgress(message = "Running evacuation analysis...", value = 0, {
+        incProgress(0.2, detail = paste0("Reading the distance-to-roads grid (", res, " m cells)..."))
+        rd  <- get_road_dist(res)
+        msk <- get_study_mask(res)
+        
+        incProgress(0.4, detail = "Ranking suitability (IDW squared)...")
+        cls <- terra::lapp(c(rd, msk), fun = function(rd, m) {
+          ifelse(is.na(m), NA, ifelse(rd <= D / 2, 1, ifelse(rd <= D, 2, 3)))
+        }, wopt = list(datatype = "INT1U"))
+        
+        incProgress(0.3, detail = "Preparing map...")
+        list(ll = display_raster(cls), freq = terra::freq(cls))
+      })
+    }, error = function(e) {
+      showNotification(paste("Evacuation error:", conditionMessage(e)), type = "error", duration = 15)
+      NULL
+    })
+    if (is.null(out)) return()
+    
+    leafletProxy("map") %>%
+      clearGroup("Evacuation Suitability") %>%
+      removeControl("evac_legend") %>%
+      addRasterImage(out$ll, colors = evac_pal, method = "ngb", opacity = 0.75,
+                     group = "Evacuation Suitability", maxBytes = img_bytes, project = FALSE) %>%
+      addLegend("bottomright", colors = evac_cols,
+                labels = c(paste0("Ideal (\u2264 ", D / 2, " m)"),
+                           paste0("Highly suitable (", D / 2, "\u2013", D, " m)"),
+                           paste0("Not ideal (> ", D, " m) \u2013 requires intervention")),
+                title = "Evacuation suitability", layerId = "evac_legend", opacity = 0.9)
+    show_in_layers("Evacuation Suitability", bounds = TRUE)
+    
+    showNotification(
+      paste0("Evacuation analysis complete (road IDW\u00b2 distance ", D, " m, ", res, " m cells). Area: Ideal ",
+             area_km2(out$freq, 1, res), " km\u00b2, Highly suitable ", area_km2(out$freq, 2, res),
+             " km\u00b2, Not ideal ", area_km2(out$freq, 3, res), " km\u00b2."),
+      type = "message", duration = 10)
+    rm(out); invisible(gc())
+  })
+  
+  #Clear Results Button
+  #Removes the LISA layer from the main map
+  clear_lisa_layer <- function() {
+    leafletProxy("map") %>%
+      clearGroup("LISA") %>%
+      removeControl("lisa_legend")
+    hide_from_layers("LISA")
+    lisa_results(NULL)
+  }
+  
+  #Clears results from the glacier choropleth, and the LISA results by extension if performed
+  observeEvent(input$clear_choropleth, {
+    clear_lisa_layer()
+    choro_data(NULL)
+    invisible(gc())
+    showNotification("Choropleth results cleared.", type = "message", duration = 3)
+  })
+  
+  #Clears the results of LISA without impacting the Choropleth 
+  observeEvent(input$clear_lisa, {
+    clear_lisa_layer()
+    invisible(gc())
+    showNotification("LISA results cleared.", type = "message", duration = 3)
+  })
+
+ #Clears results from Glacier Exposure
+  observeEvent(input$clear_risk, {
+    leafletProxy("map") %>%
+      clearGroup("Glacier Exposure") %>%
+      removeControl("risk_legend")
+    hide_from_layers("Glacier Exposure")
+    risk_result(NULL)
+    invisible(gc())      
+    showNotification("Glacier exposure results cleared.", type = "message", duration = 3)
+  })
+
+  #Clears results from Road Evacuation
+  observeEvent(input$clear_evac, {
+    leafletProxy("map") %>%
+      clearGroup("Evacuation Suitability") %>%
+      removeControl("evac_legend")
+    hide_from_layers("Evacuation Suitability")
+    invisible(gc())
+    showNotification("Evacuation results cleared.", type = "message", duration = 3)
+  })
+}
+
+shinyApp(ui = ui, server = server)
