@@ -107,7 +107,7 @@ shiny::runApp()
 
 ### Code walkthrough
 
-Click a step to see the code and what it does. The code below is an **example outline**: replace each chunk with the matching section of your own script.
+Click a step to see the code and what it does.
 
 <details>
 <summary><b>1 · Load packages</b></summary>
