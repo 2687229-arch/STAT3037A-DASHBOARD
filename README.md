@@ -1,6 +1,8 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Glacier Collapse in India" width="100%">
-</p>
+<<<<<<< HEAD
+  <a href="https://hv21.shinyapps.io/STAT3037A_APP1/">
+    <img src="assets/banner.svg" alt="Landslide and Flash Flood Dashboard banner" width="100%">
+  </a>
 
 # Landslide \& Flash Flood Early-Insight Dashboard
 
