@@ -1,7 +1,11 @@
 <p align="center">
+<<<<<<< HEAD
   <a href="https://hv21.shinyapps.io/STAT3037A_APP1/">
     <img src="assets/banner.svg" alt="Landslide and Flash Flood Dashboard banner" width="100%">
   </a>
+=======
+  <img src="assets/banner.svg" alt="Glacier Collapse in India" width="100%">
+>>>>>>> 342226454ddf991f58e71ea8bf71f634f51c51b6
 </p>
 
 # Glacier Collapse in India
@@ -43,6 +47,11 @@ Landslides and flash floods are among the most damaging hazards in mountainous a
 * See which roads and river systems fall in higher-risk areas
 * description
 
+<p align="center">
+    <img src="assets/screenshot.png" alt="Dashboard Screenshot" width="100%">
+  </a>
+
+
 ### How it works
 
 ```mermaid
@@ -76,7 +85,7 @@ This dashboard is **under active development**.
 * \[x] Build the interactive map
 * \[x] Add region comparison views
 * \[x] Add hazard indicators
-* \[ ] Deploy the app online
+* \[x] Deploy the app online
 * \[ ] Add screenshots and a demo GIF
 
 
