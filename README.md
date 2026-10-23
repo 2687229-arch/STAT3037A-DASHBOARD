@@ -335,8 +335,12 @@ india_bb <- as.numeric(st_bbox(Indiaview_full_1984))
 </details>
 
 <details>
+<<<<<<< HEAD
 <summary><b>4 · Text is added to the respective tabs (UI) </b></summary>
 
+=======
+<summary><b>4 · Text is added to the respective tabs (UI)</b></summary>
+>>>>>>> ca7214bf78ee545bd35c80bcf681156b606bfaf3
 ```r
 txt <- list(
   
@@ -446,8 +450,7 @@ fact_banner <- function(facts, seconds) {
 ```
 </details>
 <details>
-<summary><b>5 · Text Formatting</b></summary>
-
+<summary><b>5 · Text Formatting</b></summary> 
 ```r
 #For text formatting, et al. is made italics and the YouTube links are made clickable
 linkify <- function(x) {
