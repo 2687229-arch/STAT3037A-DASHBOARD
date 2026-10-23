@@ -41,9 +41,9 @@ To identify settlements susceptible to glacial collapse and flash floods, based 
 
 ### Objectives
 
-1. Map glaciers and glacial lakes across Ladakh, Uttarakhand, Himachal Pradesh and Jammu & Kashmir.
-2. Measure the distance from settlements to glaciers, along rivers and roads, to rank which communities face the highest risk.
-3. Give government and planners a reproducible, interactive tool to prioritise evacuation and relocation planning.
+1. Identify and map glaciers, and associated clusters, across Ladakh, Uttarakhand, Himachal Pradesh and Jammu & Kashmir, through Choropleth Map development and the performance of Local Indicators of Spatial Association (LISA).
+2. Determine the proximity and density of settlements to rivers, steep slopes, glaciers, respectively, to rank which communities face the highest exposure, as through the production of Squared Inverse Distance Weighting and Kernel Density Estimation.
+3. Give government and planners a reproducible, interactive tool to prioritise evacuation and relocation planning, as through Squared Inverse Distance Weighting of roads
 
 ### What you can do with it
 
