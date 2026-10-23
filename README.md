@@ -446,7 +446,6 @@ fact_banner <- function(facts, seconds) {
 ```
 
 </details>
-
 <details>
 <summary><b>5 · Text Formatting</b></summary>
 
