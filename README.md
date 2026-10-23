@@ -335,7 +335,7 @@ india_bb <- as.numeric(st_bbox(Indiaview_full_1984))
 </details>
 
 <details>
-<summary><b>4 · Text is added to the respective tabs (UI)</b></summary>
+<summary><b>4 · Text is added to the respective tabs (UI) </b></summary>
 
 ```r
 txt <- list(
@@ -444,7 +444,6 @@ fact_banner <- function(facts, seconds) {
   )
 }
 ```
-
 </details>
 <details>
 <summary><b>5 · Text Formatting</b></summary>
