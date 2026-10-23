@@ -331,7 +331,7 @@ glacier_col <- "white"
 #The four main regions are zoomed into when the dashboard is loaded, while giving the user the option to zoom out to see the whole bounds of India
 study_bb <- as.numeric(st_bbox(Regions_1984))          
 india_bb <- as.numeric(st_bbox(Indiaview_full_1984))
-
+```
 </details>
 
 <details>
