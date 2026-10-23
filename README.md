@@ -335,12 +335,8 @@ india_bb <- as.numeric(st_bbox(Indiaview_full_1984))
 </details>
 
 <details>
-<<<<<<< HEAD
-<summary><b>4 · Text is added to the respective tabs (UI) </b></summary>
+<summary><b>4·Text is added to the respective tabs (UI)</b></summary>
 
-=======
-<summary><b>4 · Text is added to the respective tabs (UI)</b></summary>
->>>>>>> ca7214bf78ee545bd35c80bcf681156b606bfaf3
 ```r
 txt <- list(
   
